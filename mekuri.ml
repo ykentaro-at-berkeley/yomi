@@ -225,9 +225,12 @@ let payoff' g : float option =
        match payoff' opp with
        | Some po -> Some (~-. po)
        | None -> None in
-  match g.current with
-  | PI -> help g.pi g.pii
-  | PII -> help g.pii g.pi
+  match g.pi.hand, g.pii.hand with
+  | [], [] -> Some 0.0 (* implies koi-nagare *)
+  | _ ->
+     match g.current with
+     | PI -> help g.pi g.pii
+     | PII -> help g.pii g.pi
 
 let payoff {data = g} = payoff' g
 
@@ -279,7 +282,7 @@ let apply_awase2 { phase = Awase2_phase c; data = data } m =
   match m with
   | Awase2_nop _ -> (* need to add it *)
      GExist { phase = Play_phase;
-              data = { data with ba = c::data.ba }}
+              data = swap' { data with ba = c::data.ba }}
   | Awase2 (_, c') ->
      let tori = cons c (cons c' p.tori) in
      k (help tori [c'])
@@ -296,7 +299,7 @@ let apply_koi_ { data = data } = function
   | Koi ->
      let p = player_of_game' data in
      let data = update_current_player' data { p with koi = Some (p.tori) } in
-     { phase = Play_phase; data = data }
+     { phase = Play_phase; data = swap' data }
   | No_koi -> { phase = Play_phase; data = swap' data }
 
 let apply : type a. a game -> a move -> egame
@@ -343,6 +346,18 @@ let random : type a. a game -> a game =
   let hand = List.take (List.length p'.hand) cs in (* I'm not cheating! *)
   let p' = { p' with hand = hand } in
   swap (update_current_player (swap g) p')
+
+let init () =
+  let empty =
+    { hikari = []; tane = []; tanzaku = []; kasu = []; bakehuda = false } in
+  let cs = Random.shuffle_list hana_karuta in
+  let hand, cs = List.take_drop 8 cs in
+  let pi = { hand = hand; tori = empty; koi = None } in
+  let hand, cs = List.take_drop 8 cs in
+  let pii = { hand = hand; tori = empty; koi = None } in
+  let ba, yama = List.take_drop 8 cs in
+  let data = { pi = pi; pii = pii; ba = ba; yama = yama; current = PI } in
+  { phase = Play_phase; data = data }
 
 module MCUCB1 (P : sig val param : float val limit : int end) = struct
   let param = P.param
@@ -417,6 +432,7 @@ module MCUCB1 (P : sig val param : float val limit : int end) = struct
            else
              let s = ts.(i) in
              let po_exp = (s.sum_payoff /. float_of_int s.n_trials) in
+             Printf.printf "%n %f\n" s.n_trials po_exp;
              if po_exp > po_acc then loop (i + 1) (i, po_exp)
              else loop (i + 1) (i_acc, po_acc) in
          loop 0 (-1, neg_infinity) in
@@ -424,3 +440,4 @@ module MCUCB1 (P : sig val param : float val limit : int end) = struct
          failwith "good_move: No available moves???"
        else List.nth ms i
 end
+module M = MCUCB1(struct let limit = 5000 let param = 50. end)
