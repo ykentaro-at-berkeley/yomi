@@ -123,11 +123,16 @@ let classify_card c =
      else CExist (Kasu_card c)
   | (_, One) -> CExist (Kasu_card c)
 
-let cons (c : card') (t : tori) =
-  let CExist c = classify_card c in
+let is_bakehuda' = function
+  | (9, Four) -> true
+  | _ -> false
+
+let cons (c' : card') (t : tori) =
+  let CExist c = classify_card c' in
   match c with
   | Hikari_card _ -> { t with hikari = c::t.hikari }
-  | Tane_card _ -> { t with tane = c::t.tane }
+  | Tane_card _ ->
+     { t with tane = c::t.tane; bakehuda = t.bakehuda || is_bakehuda' c' }
   | Tanzaku_card _ -> { t with tanzaku = c::t.tanzaku }
   | Kasu_card _ -> { t with kasu = c::t.kasu }
   
@@ -150,11 +155,15 @@ type play_t
 type koi_t
 type awase1_t
 type awase2_t
+type winning_t
+type draw_t
 type _ game_phase =
   | Play_phase : play_t game_phase
   | Koi_phase : koi_t game_phase
   | Awase1_phase : card' -> awase1_t game_phase (* lastly played card *)  
   | Awase2_phase : card' -> awase2_t game_phase (* lastly drawn card *)
+  | Winning_phase : winning_t game_phase
+  | Draw_phase : draw_t game_phase
 
 type 'a game =
   { phase : 'a game_phase;
@@ -173,7 +182,8 @@ let update_current_player' ({ current = c } as g') p =
 let update_current_player g p =
   { g with data = update_current_player' g.data p }
       
-let swap' data = { data with pi = data.pii; pii = data.pi }
+let swap' data =
+  { data with current = other data.current }
 let swap g = { g with data = swap' g.data }
 
 type _ move =
@@ -213,7 +223,9 @@ let moves : type a. a game -> a move list =
   | { phase = Play_phase } as g ->
      let p = player_of_game g in
      List.map (fun c -> Play c) p.hand
+  | { phase = Winning_phase } -> failwith "moves: applied to a winning game"
 
+(* internal definitions should use util_of_tori instead *)
 let payoff' g : float option =
   let payoff' { tori = tori } =
     let u = util_of_tori tori in
@@ -225,14 +237,21 @@ let payoff' g : float option =
        match payoff' opp with
        | Some po -> Some (~-. po)
        | None -> None in
-  match g.pi.hand, g.pii.hand with
-  | [], [] -> Some 0.0 (* implies koi-nagare *)
-  | _ ->
+  (* match g.pi.hand, g.pii.hand with *)
+  (* | [], [] -> Some 0.0 (\* implies worthless koi-nagare *\) *)
+  (* | _ -> *)
      match g.current with
      | PI -> help g.pi g.pii
      | PII -> help g.pii g.pi
 
-let payoff {data = g} = payoff' g
+(* TODO: payoff is None after Koi (but Some _ after No_koi)  *)
+(* Use GADT *)
+(* evaluates to None at Koi_phase *)
+let payoff : type a. a game -> float option
+  = function
+  | { phase = Winning_phase; data = data } -> payoff' data
+  | { phase = Draw_phase } ->  Some 0.0 (* worthless koi-nagare *)
+  | _ -> None
 
 type egame = GExist : 'a game -> egame
 
@@ -259,6 +278,11 @@ let apply_awase1_ { phase = Awase1_phase c; data = data } m =
            { phase = Awase2_phase top; data = help tori [c'; c''; c''']}
      end
 
+let check_draw ({ phase = Play_phase; data = data } as g) =
+  match data.pi.hand, data.pii.hand with
+  | [], [] -> GExist { phase = Draw_phase; data = data}
+  | _ -> GExist g
+
 let apply_awase2 { phase = Awase2_phase c; data = data } m =
   let p = player_of_game' data in
   let help tori cs =
@@ -266,23 +290,21 @@ let apply_awase2 { phase = Awase2_phase c; data = data } m =
     let data = update_current_player' data p in
     { data with ba = List.diff data.ba cs } in
   let k data =
-    let flag = 
-      match payoff' data with
-      | Some f ->
-         assert (f > 0.);
-         begin
-           match (player_of_game' data).koi with
-           | None -> true
-           | Some t when f > float (util_of_tori t) -> true (* Is this OK? *)
-           | _ -> false
-         end
-      | _ -> false in
+    let flag =
+      let p = (player_of_game' data) in
+      let u = util_of_tori p.tori in
+      if u > 0 then
+        match p.koi with
+        | None -> true
+        | Some t when u > util_of_tori t -> true (* Is this OK? *)
+        | _ -> false
+      else false in
+    (* Printf.printf "The flag is %b\n" flag; *)
     if flag then GExist { phase = Koi_phase; data = data }
-    else GExist { phase = Play_phase; data = swap' data } in
+    else (check_draw { phase = Play_phase; data = swap' data }) in
   match m with
   | Awase2_nop _ -> (* need to add it *)
-     GExist { phase = Play_phase;
-              data = swap' { data with ba = c::data.ba }}
+     k { data with ba = c::data.ba }
   | Awase2 (_, c') ->
      let tori = cons c (cons c' p.tori) in
      k (help tori [c'])
@@ -292,15 +314,17 @@ let apply_awase2 { phase = Awase2_phase c; data = data } m =
 
 let apply_play_ { data = data } (Play c) =
   let p = player_of_game' data in
+  let l = List.length p.hand in
   let p = { p with hand = List.remove c p.hand } in
+  assert (List.length p.hand = l - 1);
   { phase = Awase1_phase c; data = update_current_player' data p }
 
-let apply_koi_ { data = data } = function
+let apply_koi { data = data } = function
   | Koi ->
      let p = player_of_game' data in
      let data = update_current_player' data { p with koi = Some (p.tori) } in
-     { phase = Play_phase; data = swap' data }
-  | No_koi -> { phase = Play_phase; data = swap' data }
+     (check_draw { phase = Play_phase; data = swap' data })
+  | No_koi -> GExist { phase = Winning_phase; data = data } (* Do not swap *)
 
 let apply : type a. a game -> a move -> egame
   = fun g m ->
@@ -308,13 +332,9 @@ let apply : type a. a game -> a move -> egame
   | { phase = Awase1_phase _ } as g -> GExist (apply_awase1_ g m)
   | { phase = Awase2_phase _} as g -> apply_awase2 g m
   | { phase = Play_phase } as g -> GExist (apply_play_ g m)
-  | { phase = Koi_phase } as g -> GExist (apply_koi_ g m)
-
-let apply_only_move g =
-  let ms = moves g in
-  match ms with
-  | [m] -> apply g m
-  | _ -> failwith "apply_only_move: applied to an invalid list"
+  | { phase = Koi_phase } as g -> (apply_koi g m)
+  | { phase = Winning_phase } ->
+     failwith "apply: applied to a winning state"
 
 let cards_of_tori t =
   let a = List.map (fun (Hikari_card c) -> c) t.hikari in
@@ -343,8 +363,11 @@ let random : type a. a game -> a game =
     | _ -> [] in
   let visible = additional @ p.hand @ g.data.ba @ cs_tori @ cs_tori' in
   let cs = List.diff hana_karuta visible in
-  let hand = List.take (List.length p'.hand) cs in (* I'm not cheating! *)
+  let cs = Random.shuffle_list cs in
+  let hand, cs = List.take_drop (List.length p'.hand) cs in (* I'm not cheating! *)
+  assert (List.length cs = List.length g.data.yama);
   let p' = { p' with hand = hand } in
+  let g = { g with data = { g.data with yama = cs } } in
   swap (update_current_player (swap g) p')
 
 let init () =
@@ -365,6 +388,12 @@ module MCUCB1 (P : sig val param : float val limit : int end) = struct
     
   let rec simple_playout : type a. player_id -> a game -> a move -> float =
     fun p g m ->
+    (* begin *)
+    (*   match m with *)
+    (*   | Play (m, r) -> *)
+    (*      Printf.printf "(%d, %d)\n" m (Obj.magic r) *)
+    (*   | _ -> () *)
+    (* end; *)
     let GExist g = apply g m in
     match payoff g with
     | Some po ->
@@ -422,8 +451,9 @@ module MCUCB1 (P : sig val param : float val limit : int end) = struct
        let rec loop i =
          if i >= limit then ()
          else
-           let g = random g in
-           add_one_playout g ms ts;
+           let g' = random g in
+           assert (ms = moves g');
+           add_one_playout g' ms ts;
            loop (i + 1) in
        loop 0;
        let i =
@@ -440,4 +470,3 @@ module MCUCB1 (P : sig val param : float val limit : int end) = struct
          failwith "good_move: No available moves???"
        else List.nth ms i
 end
-module M = MCUCB1(struct let limit = 5000 let param = 50. end)
