@@ -30,11 +30,23 @@ type yaku =
   | Inosikatyoo | Tane of int (* ditto *)
   | Kasu of int (* ditto *)
 
+(* Do not want to use polymorphic eq function *)
+(* Idk why, but = emits that for rank *)
+let eq_card' ((m, r) : card') ((m', r') : card') = m == m' && r == r'
+let eq_card : type a. a card -> a card -> bool =
+  fun x y ->
+  match x, y with
+  | Hikari_card c, Hikari_card c' -> eq_card' c c'
+  | Tanzaku_card c, Tanzaku_card c' -> eq_card' c c'
+  | Tane_card c, Tane_card c' -> eq_card' c c'
+  | Kasu_card c, Kasu_card c' -> eq_card' c c'
+
 let aristocrat = Hikari_card (11, Four)
 
 let yaku_of_hikari (cs : hikari_t card list) =
   let l, has_aristo =
-    let f (l, has_aristo) c = (l + 1, has_aristo || c = aristocrat) in
+    let f (l, has_aristo) c =
+      (l + 1, has_aristo || eq_card c aristocrat) in
     List.fold_left f (0, false) cs in
   if l = 5 then [Gokoo]
   else if l = 4 then
@@ -66,7 +78,10 @@ let tyoo = Tane_card (6, Four)
 let yaku_of_tane (cs : tane_t card list) =
   let (l, has_ino, has_sika, has_tyoo) = 
     let f (l, has_ino, has_sika, has_tyoo) c =
-      (l + 1, has_ino || c = ino, has_sika || c = sika, has_tyoo || c = tyoo) in
+      (l + 1,
+       has_ino || eq_card c ino,
+       has_sika || eq_card c sika,
+       has_tyoo || eq_card c tyoo) in
     List.fold_left f (0, false, false, false) cs in
   (if has_ino && has_sika && has_tyoo then [Inosikatyoo] else [])
   @ (if l >= 5 then [Tane (l - 5)] else [])
@@ -197,7 +212,7 @@ type _ move =
   | Awase2_basanbon : card' * card' * card' * card' -> awase2_t move
   | Awase2_nop : card' -> awase2_t move
 
-let awase (m, r) ba =
+let awase ((m, r) : card') ba =
   let f acc ((m', r') as c') = if m' = m then c' :: acc else acc in 
   List.fold_left f [] ba
 
@@ -261,17 +276,9 @@ let payoff : type a. a game -> float option
 
 type egame = GExist : 'a game -> egame
 
-let eq_card' (m, r) (m', r') = m = m' && r = r'
-
 (* From containers *)
-(* let remove_one_card' x l = *)
-(*   let rec remove_one x acc l = match l with *)
-(*     | [] -> assert false *)
-(*     | y :: tl when eq_card' x y -> List.rev_append acc tl *)
-(*     | y :: tl -> remove_one x (y::acc) tl *)
-(*   in *)
-(*   if mem ~eq x l then remove_one ~eq x [] l else l *)
-let remove_card' ~x l =
+(* monomorphic list operations *) 
+let remove_card' x l =
   let rec remove' x acc l = match l with
     | [] -> List.rev acc
     | y :: tail when eq_card' x y -> remove'  x acc tail
@@ -342,7 +349,7 @@ let apply_awase2 { phase = Awase2_phase c; data = data } m =
 let apply_play_ { data = data } (Play c) =
   let p = player_of_game' data in
   (* let l = List.length p.hand in *)
-  let p = { p with hand = List.remove c p.hand } in
+  let p = { p with hand = remove_card' c p.hand } in
   (* assert (List.length p.hand = l - 1); *)
   { phase = Awase1_phase c; data = update_current_player' data p }
 
@@ -424,7 +431,7 @@ module MCUCB1 (P : sig val param : float val limit : int end) = struct
     let GExist g = apply g m in
     match payoff g with
     | Some po ->
-         if g.data.current = p then po else ~-.po
+         if g.data.current == p then po else ~-.po
     | None ->
        let ms = moves g in
        simple_playout p g (Random.randomth_list ms)
