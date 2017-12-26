@@ -261,6 +261,27 @@ let payoff : type a. a game -> float option
 
 type egame = GExist : 'a game -> egame
 
+let eq_card' (m, r) (m', r') = m = m' && r = r'
+
+(* From containers *)
+(* let remove_one_card' x l = *)
+(*   let rec remove_one x acc l = match l with *)
+(*     | [] -> assert false *)
+(*     | y :: tl when eq_card' x y -> List.rev_append acc tl *)
+(*     | y :: tl -> remove_one x (y::acc) tl *)
+(*   in *)
+(*   if mem ~eq x l then remove_one ~eq x [] l else l *)
+let remove_card' ~x l =
+  let rec remove' x acc l = match l with
+    | [] -> List.rev acc
+    | y :: tail when eq_card' x y -> remove'  x acc tail
+    | y :: tail -> remove'  x (y::acc) tail
+  in
+  remove'  x [] l
+let diff_card' (xs : card' list) (ys : card' list) =
+  let f xs y = remove_card' y xs in
+  List.fold_left f xs ys
+  
 let apply_awase1_ { phase = Awase1_phase c; data = data } m =
   match data.yama with
   | [] -> failwith "apply : we should never run out of cards"
@@ -270,7 +291,7 @@ let apply_awase1_ { phase = Awase1_phase c; data = data } m =
      let help tori cs =
        let p = { p with tori = tori } in
        let data = update_current_player' data p in
-       { data with ba = List.diff data.ba cs } in
+       { data with ba = diff_card' data.ba cs } in
      begin
        match m with
        | Awase1_nop ->
@@ -294,7 +315,7 @@ let apply_awase2 { phase = Awase2_phase c; data = data } m =
   let help tori cs =
     let p = { p with tori = tori } in
     let data = update_current_player' data p in
-    { data with ba = List.diff data.ba cs } in
+    { data with ba = diff_card' data.ba cs } in
   let k data =
     let flag =
       let p = (player_of_game' data) in
@@ -368,7 +389,7 @@ let random : type a. a game -> a game =
     | { phase = Awase2_phase c } -> [c]
     | _ -> [] in
   let visible = additional @ p.hand @ g.data.ba @ cs_tori @ cs_tori' in
-  let cs = List.diff hana_karuta visible in
+  let cs = diff_card' hana_karuta visible in
   let cs = Random.shuffle_list cs in
   let hand, cs = List.take_drop (List.length p'.hand) cs in (* I'm not cheating! *)
   assert (List.length cs = List.length g.data.yama);
