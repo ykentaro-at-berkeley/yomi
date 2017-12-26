@@ -233,7 +233,7 @@ and loop_awase2 p (g : awase2_t game) (m : awase2_t move) =
        | GExist ({ phase = Draw_phase }) -> k_draw ())
 
 let start () =
-  Random.self_init ();
+  Random.init 424242;
   let g = init () in
   loop_play human g
 
