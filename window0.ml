@@ -1,7 +1,8 @@
 open Mekuri
 open Printf
+open Names
 
-module M = MCUCB1(struct let limit = 1_0000 let param = 50. end)
+module M = MCUCB1(struct let limit = 5000 let param = 50. end)
 
 let (>>=) = Lwt.bind
 module Html = Dom_html
@@ -9,6 +10,8 @@ module Events = Lwt_js_events
 
 let js = Js.string
 let document = Html.window##.document
+
+let hash x = Hashtbl.hash_param 20 100 x
 
 let append_text e s =
   let d = Html.createDiv document in
@@ -25,11 +28,13 @@ let path_of_card (mon, ran) =
     | Four -> 4 in
   Printf.sprintf "images/Hanafuda %d-%d.svg" mon ir
 
-let card_width = 93
-let card_height = 147
+let card_width = 62
+let card_height = 98
 
 let string_of_card c' =
-  Printf.sprintf "<img width=%d height=%d src=\"%s\"></img>"
+  let h = hash c' in
+  Printf.sprintf "<img id='img%d' width=%d height=%d src=\"%s\"></img>"
+                 h
                  card_width card_height
                  (path_of_card c')
 
@@ -50,42 +55,77 @@ let printf' s =
                
 let printf fmt = Printf.ksprintf printf' fmt
 
-let bank =
-  let f c = (c, Html.createImg document) in
-  List.map f hana_karuta
-let wait_for_bank () =
-  let ts =
-    let f (c, i) =
-      i##.src := js (path_of_card c);
-      Events.load i >>= fun _ -> Lwt.return () in
-    List.map f bank in
-  Lwt.join ts
+let worker : (Js.js_string Js.t, Js.js_string Js.t) Worker.worker Js.t
+  = Worker.create "sigotonin0.js"
+(* let bank = *)
+(*   let f c = (c, Html.createImg document) in *)
+(*   List.map f hana_karuta *)
+(* let wait_for_bank () = *)
+(*   let ts = *)
+(*     let f (c, i) = *)
+(*       i##.src := js (path_of_card c); *)
+(*       Events.load i >>= fun _ -> Lwt.return () in *)
+(*     List.map f bank in *)
+(*   Lwt.join ts *)
 
 type t = { visible : bool; name : string;
            choose_move : 'a. 'a game -> 'a move list -> 'a move Lwt.t}
 
+let catch_raise t =
+  Lwt.catch (fun () -> t)
+            (fun e -> Printf.printf "%s\n" @@ Printexc.to_string e; raise e)
+
+let human_choose_move : type a. a game -> a move list -> a move Lwt.t =
+  (fun _ ms ->
+    let body =
+      Js.Opt.get (document##getElementById (js "yomi"))
+                 (fun () -> assert false) in
+    printf "Choose a move: ";
+    match ms with
+    | (Play _) ::_ ->
+       let cs = List.map (fun (Play c) -> c) ms in
+       let h = hash cs in
+       let id = Printf.sprintf "hash%d" h in
+       let div = Js.Opt.get
+                   (document##getElementById (js id))
+                   (fun () ->
+                     failwith "human.choose_move: can't get the div") in
+       let f (Play c as m)  =
+         let i =
+           let id = Printf.sprintf "#img%d" (hash c) in
+           Js.Opt.get (div##querySelector (js id))
+                      (fun () ->
+                        failwith "human.choose_move: can't get the img") in
+         catch_raise @@ Events.click i >>= fun _ ->
+         Lwt.return m in
+       Lwt.choose (List.map f ms)
+    | _ ->
+       let f m =
+         let o = Html.createButton document in
+         Dom.appendChild body o;
+         o##.innerHTML := js (string_of_move m);
+         o##scrollIntoView Js._false;
+         catch_raise @@ Events.click o >>= (fun _ ->
+         Lwt.return m ) in
+       Lwt.choose (List.map f ms))
+
 let human =
   { visible = true;
     name = "Human";
-    choose_move  =
-      fun _ ms ->
-      let body =
-        Js.Opt.get (document##getElementById (js "yomi"))
-                   (fun () -> assert false) in
-      printf "Choose a move: ";
-      let f m =
-        let o = Html.createButton document in
-        Dom.appendChild body o;
-        o##.innerHTML := js (string_of_move m);
-        o##scrollIntoView Js._false;
-        Events.click o >>= fun _ ->
-        Lwt.return m  in
-      Lwt.choose (List.map f ms) }
+    choose_move   = human_choose_move }
 
-let ai =
+let rec ai =
   { visible = false;
-    name = "AlphaKoikoi";
-    choose_move = fun g _ -> Lwt.return (M.good_move g) }
+    name = "Computer";
+    choose_move = fun g _ -> Lwt.return (M.good_move g)
+                  (* printf "%s is thinking..." ai.name; *)
+                  (* worker##postMessage (Json.output g); *)
+                  (* let ev = Html.Event.make "message" in *)
+                  (* Events.make_event ev worker >>= *)
+                  (*   fun e -> *)
+                  (*   let move = Json.unsafe_input e##.data in *)
+                  (*   Lwt.return move *)
+  }
 
 let basanbon p (c', c'', c''') = 
   printf
@@ -93,23 +133,33 @@ let basanbon p (c', c'', c''') =
     p.name
     (string_of_card c') (string_of_card c'') (string_of_card c''')
 
-let print_tori tori = printf "Utility is %d</br>" (util_of_tori tori)
+let print_list rightleader cs =
+  let h = hash cs in
+  let content = (List.fold_left (^) "" (List.map string_of_card cs)) in
+  match  rightleader with
+  | Some s -> 
+     printf "<div style='float:right' id='hash%d'>%s</br>%s</div>" h s content
+  | None -> printf "<div id = 'hash%d'>%s</div>" h content
 
-let print_list cs =
-  printf "%s" (List.fold_left (^) "" (List.map string_of_card cs))
+let print_tori tori =
+  List.iter (fun y -> printf "%s" (string_of_yaku y)) (yaku_of_tori tori);
+  print_list None (cards_of_tori tori)
 
 let rec loop_play p (g : play_t game)  =
   match payoff g with
   | Some f -> failwith "loop_play : game should have been over"
   | None ->
-     printf "--------------------</br>Ba:";
-     print_list g.data.ba;
-     printf "</br>%s's torihuda:</br>" p.name;
-     print_list @@ cards_of_tori (player_of_game g).tori;
+     printf "<hr>";
+     let () =
+       let s = 
+         Printf.sprintf "%s's torihuda:" p.name in
+       print_list (Some s) (cards_of_tori (player_of_game g).tori) in
+     printf "Ba:</br>";
+     print_list None g.data.ba;
      if p.visible then 
        begin
          printf "</br>%s's hand:</br>" p.name;
-         print_list (player_of_game g).hand;
+         print_list None (player_of_game g).hand;
        end;
      let ms = moves g in
      p.choose_move g ms >>= (fun m ->
@@ -159,25 +209,28 @@ and loop_awase1 p (g : awase1_t game) (m : awase1_t move) =
         printf "%s is getting %s.</br>" p.name (string_of_card c');
         loop_awase2 p g m
 and loop_awase2 p (g : awase2_t game) (m : awase2_t move) =
+  let k_draw () =
+    printf "The game ended in draw.</br>";
+    Lwt.return () in
   match apply g m with
+  | GExist ({ phase = Draw_phase }) -> k_draw ()
   | GExist ({ phase = Play_phase } as g) ->
      loop_play (if p.visible then ai else human) g
   | GExist ({ phase = Koi_phase } as g) ->
      printf "%s has a (new) yaku: </br>" p.name;
      print_tori (player_of_game g).tori;
-     printf "%s can now choose between Koi and No_koi.</br>" p.name;
+     printf "%s can now declare koi.</br>" p.name;
      p.choose_move g (moves g) >>= (fun m ->
        printf "%s chose %s.</br>" p.name (match m with Koi -> "Koi" | _ -> "No_koi");
        match apply g m with
        | GExist ({ phase = Play_phase } as g) ->
           loop_play (if p.visible then ai else human) g
        | GExist ({ phase = Winning_phase } as g) ->
-          print_tori (player_of_game g).tori;
-          printf "%s won.</br>" p.name (* No recursive call *);
-          Lwt.return ();
-       | GExist ({ phase = Draw_phase }) ->
-          printf "The game ended in draw.</br>";
-          Lwt.return ())
+          let tori = (player_of_game g).tori in
+          print_tori tori;
+          printf "%s won with payoff %d.</br>" p.name (util_of_tori tori);
+          Lwt.return ()
+       | GExist ({ phase = Draw_phase }) -> k_draw ())
 
 let start () =
   Random.self_init ();

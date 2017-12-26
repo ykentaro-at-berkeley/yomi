@@ -230,6 +230,12 @@ let payoff' g : float option =
   let payoff' { tori = tori } =
     let u = util_of_tori tori in
     if u > 0 then Some (float u) else None in
+    (* let y = yaku_of_tori tori in *)
+    (* match y with *)
+    (* | [] -> None *)
+    (* | y ->  *)
+    (*    let f acc c = acc + util_of_yaku c in *)
+    (*    Some (float (List.fold_left f 0 y)) in *)
   let help cur opp =
     match (payoff' cur) with
     | Some po -> Some po
@@ -314,9 +320,9 @@ let apply_awase2 { phase = Awase2_phase c; data = data } m =
 
 let apply_play_ { data = data } (Play c) =
   let p = player_of_game' data in
-  let l = List.length p.hand in
+  (* let l = List.length p.hand in *)
   let p = { p with hand = List.remove c p.hand } in
-  assert (List.length p.hand = l - 1);
+  (* assert (List.length p.hand = l - 1); *)
   { phase = Awase1_phase c; data = update_current_player' data p }
 
 let apply_koi { data = data } = function
@@ -452,7 +458,8 @@ module MCUCB1 (P : sig val param : float val limit : int end) = struct
          if i >= limit then ()
          else
            let g' = random g in
-           assert (ms = moves g');
+           (* assert (ms = moves g'); *)
+           (* if g'.data.yama = g.data.yama then Printf.printf "Cheating???"; *)
            add_one_playout g' ms ts;
            loop (i + 1) in
        loop 0;
@@ -462,7 +469,7 @@ module MCUCB1 (P : sig val param : float val limit : int end) = struct
            else
              let s = ts.(i) in
              let po_exp = (s.sum_payoff /. float_of_int s.n_trials) in
-             (* Printf.printf "%n %f\n" s.n_trials po_exp; *)
+             Printf.printf "%d: %d %f\n" i s.n_trials po_exp;
              if po_exp > po_acc then loop (i + 1) (i, po_exp)
              else loop (i + 1) (i_acc, po_acc) in
          loop 0 (-1, neg_infinity) in

@@ -2,7 +2,7 @@ open Mekuri
 open Names
 open Printf
 
-module M = MCUCB1(struct let limit = 1_0000 let param = 50. end)
+module M = MCUCB1(struct let limit = 10 let param = 50. end)
 
 let id x = x
 
