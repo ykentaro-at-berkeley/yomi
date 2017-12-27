@@ -224,7 +224,9 @@ let moves : type a. a game -> a move list =
        | [] -> [Awase1_nop]
        | x::y::z::w::_ -> failwith "moves: too many matching cards"
        | x::y::z::[] -> [Awase1_basanbon (x, y, z)]
-       | cs -> List.map (fun c' -> Awase1 c') cs
+       | x::y::[] -> [Awase1 x; Awase1 y]
+       | x::[] -> [Awase1 x]
+       (* | cs -> List.map (fun c' -> Awase1 c') cs *)
      end
   | { phase = Awase2_phase c; data = data } -> 
      begin

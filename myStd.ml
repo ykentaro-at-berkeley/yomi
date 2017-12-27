@@ -4,6 +4,22 @@ module List = struct
   (* From containers *)
   (* max depth for direct recursion *)
   let direct_depth_default_ = 1000
+  let mem ?(eq=(=)) x l =
+    let rec search eq x l = match l with
+      | [] -> false
+      | y::l' -> eq x y || search eq x l'
+    in search eq x l
+
+  let add_nodup ?(eq=(=)) x l =
+    if mem ~eq x l then l else x::l
+
+  let remove_one ?(eq=(=)) x l =
+    let rec remove_one ~eq x acc l = match l with
+      | [] -> assert false
+      | y :: tl when eq x y -> List.rev_append acc tl
+      | y :: tl -> remove_one ~eq x (y::acc) tl
+    in
+    if mem ~eq x l then remove_one ~eq x [] l else l
   let remove ?(eq=(=)) ~x l =
     let rec remove' eq x acc l = match l with
       | [] -> List.rev acc
@@ -40,8 +56,8 @@ module List = struct
   let take_drop n l = take n l, drop n l
                                      
   (* my work *)
-  let diff xs ys =
-    let f xs y = remove y xs in
+  let diff ?(eq=(=)) xs ys =
+    let f xs y = remove ~eq:eq ~x:y xs in
     List.fold_left f xs ys
 end
 module Random = struct

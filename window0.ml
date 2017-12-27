@@ -117,14 +117,14 @@ let human =
 let rec ai =
   { visible = false;
     name = "Computer";
-    choose_move = fun g _ -> Lwt.return (M.good_move g)
-                  (* printf "%s is thinking..." ai.name; *)
-                  (* worker##postMessage (Json.output g); *)
-                  (* let ev = Html.Event.make "message" in *)
-                  (* Events.make_event ev worker >>= *)
-                  (*   fun e -> *)
-                  (*   let move = Json.unsafe_input e##.data in *)
-                  (*   Lwt.return move *)
+    choose_move = fun g _ -> (* Lwt.return (M.good_move g) *)
+                  printf "%s is thinking..." ai.name;
+                  worker##postMessage (Json.output g);
+                  let ev = Html.Event.make "message" in
+                  Events.make_event ev worker >>=
+                    fun e ->
+                    let move = Json.unsafe_input e##.data in
+                    Lwt.return move
   }
 
 let basanbon p (c', c'', c''') = 
@@ -156,7 +156,7 @@ let rec loop_play p (g : play_t game)  =
        print_list (Some s) (cards_of_tori (player_of_game g).tori) in
      printf "Ba:</br>";
      print_list None g.data.ba;
-     if p.visible then 
+     if p.visible || true then 
        begin
          printf "</br>%s's hand:</br>" p.name;
          print_list None (player_of_game g).hand;
@@ -233,7 +233,7 @@ and loop_awase2 p (g : awase2_t game) (m : awase2_t move) =
        | GExist ({ phase = Draw_phase }) -> k_draw ())
 
 let start () =
-  Random.init 424242;
+  Random.self_init ();
   let g = init () in
   loop_play human g
 
