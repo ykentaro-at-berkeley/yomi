@@ -156,7 +156,7 @@ let rec loop_play p (g : play_t game)  =
        print_list (Some s) (cards_of_tori (player_of_game g).tori) in
      printf "Ba:</br>";
      print_list None g.data.ba;
-     if p.visible || true then 
+     if p.visible then 
        begin
          printf "</br>%s's hand:</br>" p.name;
          print_list None (player_of_game g).hand;
@@ -211,7 +211,7 @@ and loop_awase1 p (g : awase1_t game) (m : awase1_t move) =
 and loop_awase2 p (g : awase2_t game) (m : awase2_t move) =
   let k_draw () =
     printf "The game ended in draw.</br>";
-    Lwt.return () in
+    Lwt.return (p.name, 0) in
   match apply g m with
   | GExist ({ phase = Draw_phase }) -> k_draw ()
   | GExist ({ phase = Play_phase } as g) ->
@@ -228,14 +228,28 @@ and loop_awase2 p (g : awase2_t game) (m : awase2_t move) =
        | GExist ({ phase = Winning_phase } as g) ->
           let tori = (player_of_game g).tori in
           print_tori tori;
-          printf "%s won with payoff %d.</br>" p.name (util_of_tori tori);
-          Lwt.return ()
+          let u = (util_of_tori tori) in
+          printf "%s won with payoff %d.</br>" p.name u;
+          Lwt.return (p.name, u)
        | GExist ({ phase = Draw_phase }) -> k_draw ())
 
 let start () =
   Random.self_init ();
-  let g = init () in
-  loop_play human g
+  let rec loop b n acc = 
+    let body =
+      Js.Opt.get (document##getElementById (js "yomi"))
+                 (fun () -> assert false) in
+    body##.innerHTML := js "";
+    printf "You have won %d point(s) after %d game(s)." acc n;
+    let g = init () in
+    loop_play (if b then ai else human) g >>= fun (name, po) ->
+    let but = Html.createButton document in
+    Dom.appendChild body but;
+    but##.innerHTML := js "Proceed to the next round";
+    but##scrollIntoView Js._false;
+    Events.click but >>= fun _ ->
+    loop (not b) (n + 1) (acc + (if name = human.name then po else -po)) in
+  loop false 0 0
 
 let _ =
   Html.window##.onload := Html.handler (fun _ -> ignore (start ()); Js._false)
