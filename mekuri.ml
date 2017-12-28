@@ -406,17 +406,37 @@ let random : type a. a game -> a game =
   let g = { g with data = { g.data with yama = cs } } in
   swap (update_current_player (swap g) p')
 
-let init () =
+let has_si hand =
+  let rec loop m =
+    if m > 12 then false
+    else
+      if
+        let f acc (m', _) = if m = m' then 1 + acc else acc in
+        4 <= List.fold_left f 0 hand
+      then true
+      else loop (1 + m) in
+  loop 1
+
+let rec init () =
   let empty =
     { hikari = []; tane = []; tanzaku = []; kasu = []; bakehuda = false } in
   let cs = Random.shuffle_list hana_karuta in
   let hand, cs = List.take_drop 8 cs in
+  (* if has_si hand then *)
+  (*   (Printf.printf "Redealing\n"; init ()) *)
+  (* else *)
   let pi = { hand = hand; tori = empty; koi = None } in
   let hand, cs = List.take_drop 8 cs in
+  (* if has_si hand then *)
+  (*   (Printf.printf "Redealing\n"; init ()) *)
+  (* else *)
   let pii = { hand = hand; tori = empty; koi = None } in
   let ba, yama = List.take_drop 8 cs in
-  let data = { pi = pi; pii = pii; ba = ba; yama = yama; current = PI } in
-  { phase = Play_phase; data = data }
+  if has_si yama then
+    (Printf.printf "Redealing\n"; init ())
+  else
+    let data = { pi = pi; pii = pii; ba = ba; yama = yama; current = PI } in
+    { phase = Play_phase; data = data }
 
 module MCUCB1 (P : sig val param : float val limit : int end) = struct
   let param = P.param
@@ -474,7 +494,7 @@ module MCUCB1 (P : sig val param : float val limit : int end) = struct
       ts.(i).sum_payoff <- ts.(i).sum_payoff +. po;
       ts.(i).n_trials <- ts.(i).n_trials + 1
 
-  let good_move : type a. a game -> a move =
+  let  good_move : type a. a game -> a move =
     fun g ->
     let ms = moves g in
     match ms with
@@ -484,15 +504,33 @@ module MCUCB1 (P : sig val param : float val limit : int end) = struct
        let ts =
          let f _ = { sum_payoff = 0.; n_trials = 0 } in
          Array.init n f in
-       let rec loop i =
-         if i >= limit then ()
-         else
-           let g' = random g in
-           (* assert (ms = moves g'); *)
-           (* if g'.data.yama = g.data.yama then Printf.printf "Cheating???"; *)
-           add_one_playout g' ms ts;
-           loop (i + 1) in
-       loop 0;
+       begin
+         let handle_koi g i j =
+           ts.(i).sum_payoff <- simple_playout g.data.current g No_koi;
+           ts.(i).n_trials <- 1;
+           let rec loop i =
+             if i >= limit then ()
+             else
+               let g = random g in
+               let po = simple_playout g.data.current g Koi in
+               ts.(j).sum_payoff <- ts.(j).sum_payoff +. po;
+               ts.(j).n_trials <- ts.(j).n_trials + 1;
+               loop (i + 1) in
+           loop 0 in
+         match ms with
+         | [Koi; No_koi] -> handle_koi g 1 0
+         | [No_koi; Koi] -> handle_koi g 0 1
+         | _ ->
+           let rec loop i =
+             if i >= limit then ()
+             else
+               let g' = random g in
+               (* assert (ms = moves g'); *)
+               (* if g'.data.yama = g.data.yama then Printf.printf "Cheating???"; *)
+               add_one_playout g' ms ts;
+               loop (i + 1) in
+           loop 0
+       end;
        let i =
          let rec loop i (i_acc, po_acc) =
            if i >= n then i_acc
