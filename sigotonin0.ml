@@ -1,7 +1,7 @@
-open Toppa
+open Mekuri
 
-(* module M = MCUCB1(struct let limit = 1_0000 let param = 50. end) *)
-module M = MCUCB1(struct let limit = 1_0000 let param = 8. *. sqrt 2. end)
+module M = MCUCB1(struct let limit = 1_0000 let param = 50. end)
+(* module M = MCUCB1(struct let limit = 1_0000 let param = 8. *. sqrt 2. end) *)
 
 let () =
   Worker.set_onmessage (fun s ->
