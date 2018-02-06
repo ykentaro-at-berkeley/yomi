@@ -11,6 +11,10 @@ let js_sprintf fmt = Printf.kprintf js fmt
                        
 let document = Html.window##.document
 
+let catch_raise t =
+  Lwt.catch (fun () -> t)
+            (fun e -> Printf.printf "%s\n" @@ Printexc.to_string e; raise e)
+
 let hash x = Hashtbl.hash_param 20 100 x
 
 let append_text e s =
@@ -30,12 +34,34 @@ let path_of_card (mon, ran) =
 let card_width = 62
 let card_height = 98
 
+let dialog f =
+  let b = Html.createDiv document in
+  b##.style##.cssText :=
+    js "position: fixed;\
+        z-index: 1000;\
+        left: 0;\
+        top: 0;\
+        width: 100%;\
+        height: 100%;\
+        overflow: auto;\
+        background-color: rgba(0,0,0,0.3);";
+  let c = Html.createDiv document in
+  Dom.appendChild b c;
+  c##.style##.cssText :=
+    js "background-color: rgba(255,255,255,0.85);\
+        color: black;\
+        margin: 15% auto;\
+        padding: 20px;\
+        border: 1px solid #888;\
+        width: 80%";
+  (b, c)
+
 module Drawer = struct
   let y_ai = 0
   let y_ba = card_height + card_height/2
-  let y_human = card_height * 4
-  let x_tori = card_width*11
-  let gap = 10
+  let y_human = 4*card_height + card_height/2
+  let x_tori = card_width*11 + card_width/2
+  let gap = 7
 
   let bank =
     let f c = (c, Html.createImg document) in
@@ -63,6 +89,7 @@ module Drawer = struct
     let ds = Html.createDiv document in
     Dom.appendChild div ds;
     ds##.innerHTML := js s;
+    mes##.innerHTML := js "";
     Dom.appendChild div mes
 
   (* let compare r r' = Pervasives.compare r.z r'.z *)
@@ -100,23 +127,27 @@ module Drawer = struct
   let set_coord c x y =
     let _, canv = get_repr c in set_coord' canv x y
 
-  let card_border = "3px ridge black"
+  let card_border = "2px outset black"
+
+  let make_repr_internal c =
+    let canv = Html.createCanvas document in
+    canv##.width := card_width;
+    canv##.height := card_height;
+    let card_width, card_height =
+      float card_width, float card_height in
+    let ctx = canv##getContext Html._2d_ in
+    ctx##.fillStyle := js "white";
+    ctx##fillRect 0. 0. card_width card_height;
+    ctx##drawImage_withSize (List.assoc c bank)
+                            0. 0.
+                            card_width card_height;
+    canv##.style##.border := js card_border;
+    canv
 
   let make_repr (c : card') =
     try (c, List.assoc c !cards) with (* *)
     | Not_found ->
-       let canv = Html.createCanvas document in
-       canv##.width := card_width;
-       canv##.height := card_height;
-       let card_width, card_height =
-         float card_width, float card_height in
-       let ctx = canv##getContext Html._2d_ in
-       ctx##.fillStyle := js "white";
-       ctx##fillRect 0. 0. card_width card_height;
-       ctx##drawImage_withSize (List.assoc c bank)
-                               0. 0.
-                               card_width card_height;
-       canv##.style##.border := js card_border;
+       let canv = make_repr_internal c in
        let r = (c, canv) in
        cards := r::!cards;
        Dom.appendChild div canv;
@@ -190,6 +221,20 @@ module Drawer = struct
   let set_z c z =
     let _, canv = get_repr c in set_z' canv z
 
+  let show_tori_dialog (cs : card' list ) =
+    let body =
+      Js.Opt.get (document##getElementById (js "yomi"))
+                 (fun () -> assert false) in
+    let b, cont = dialog () in
+    Dom.appendChild body b;
+    let f c =
+      let canv = make_repr_internal c in
+      Dom.appendChild cont canv in
+    List.iter f cs;
+    (catch_raise @@ Events.click b) >>= (fun _ ->
+      Dom.removeChild body b;
+      Lwt.return ())
+
   let align_tori y (cs : card' list) =
     let inner =
       Js.Optdef.get Html.window##.innerWidth (fun () -> assert false) in
@@ -199,8 +244,11 @@ module Drawer = struct
     let f (x, z) c =
       set_coord c (int_of_float x) y;
       set_z c z;
-      (x +. dx, z - 1) in
-    ignore (List.fold_left f (float x_tori, -1) cs)
+      let _, canv = get_repr c in
+      canv##.onclick :=
+        Html.handler (fun _ -> ignore (show_tori_dialog cs); Js._true);
+      (x +. dx, z + 1) in
+    ignore (List.fold_left f (float x_tori, 1) cs)
 
   let reveal_card (c : card') =
     ignore (make_repr c);
@@ -223,6 +271,25 @@ module Drawer = struct
   let message s =
     mes##.innerHTML := js s
 end
+
+module Sound = struct
+  let move = Html.createAudio document
+
+  let init () =
+    let body =
+      Js.Opt.get (document##getElementById (js "yomi"))
+                 (fun () -> assert false) in
+    move##.autoplay := Js._false;
+    move##.src := js SoundData.move;
+    move##.volume := 1.0;
+    move##load;
+    Dom.appendChild body move
+    
+  let play () =
+    move##.currentTime := 0.0;
+    move##play
+end
+
 let string_of_card c' =
   let h = hash c' in
   Printf.sprintf "<img id='img%d' width=%d height=%d src=\"%s\"></img>"
@@ -247,37 +314,8 @@ let string_of_move : type a. a move -> string = function
                
 (* let printf fmt = Printf.ksprintf printf' fmt *)
 
-let worker : (Js.js_string Js.t, Js.js_string Js.t) Worker.worker Js.t
-  = Worker.create "sigotonin0.js"
-
 type t = { visible : bool; name : string;
            choose_move : 'a. 'a game -> 'a move list -> 'a move Lwt.t}
-
-let catch_raise t =
-  Lwt.catch (fun () -> t)
-            (fun e -> Printf.printf "%s\n" @@ Printexc.to_string e; raise e)
-
-let dialog f =
-  let b = Html.createDiv document in
-  b##.style##.cssText :=
-    js "position: fixed;\
-        z-index: 1;\
-        left: 0;\
-        top: 0;\
-        width: 100%;\
-        height: 100%;\
-        overflow: auto;\
-        background-color: rgba(0,0,0,0.4);";
-  let c = Html.createDiv document in
-  Dom.appendChild b c;
-  c##.style##.cssText :=
-    js "background-color: #fefefe;\
-        color: black;\
-        margin: 15% auto;\
-        padding: 20px;\
-        border: 1px solid #888;\
-        width: 80%";
-  (b, c)
 
 let choose_card cs =
   List.iter (fun c -> Drawer.set_attention c true) cs;
@@ -288,80 +326,100 @@ let choose_card cs =
       List.iter (fun c -> Drawer.set_attention c false) cs;
       Lwt.return c in
     List.map f cs in
-  Lwt.choose ts
+  Lwt.pick ts
+
+let create_phony_a s =
+  let a = Html.createA document in
+  a##.href := js "javascript:;";
+  a##.innerHTML := js s;
+  a
+
+let create_gap () =
+  let g = document##createTextNode (js " ") in
+  g
 
 let human_choose_move : type a. a game -> a move list -> a move Lwt.t =
   (fun g ms ->
     let body =
       Js.Opt.get (document##getElementById (js "yomi"))
                  (fun () -> assert false) in
-    Printf.printf "Choose a move: ";
     match g with
     | { phase = Play_phase } ->
        let cs = List.map (fun (Play c) -> c) ms in
        let ts =
          let f c =
-           Printf.printf "Generating a thread for %s\n" (string_of_card c);
            let (_, r) = Drawer.get_repr c in
            (catch_raise @@ Events.click r) >>= fun _ -> Lwt.return (Play c) in
          List.map f cs in
-       Lwt.choose ts
+       Lwt.pick ts
     | { phase = Koi_phase } ->
-       let b, c = dialog () in
-       Dom.appendChild body b;
-       append_text c "You have a (new) yaku:";
-       List.iter (fun y -> append_text c @@ string_of_yaku y)
-                 (yaku_of_tori (player_of_game g).tori);
-       let f m =
-         let o = Html.createButton document in
-         Dom.appendChild c o;
-         o##.innerHTML := js (string_of_move m);
-         (catch_raise @@ Events.click o) >>= (fun _ ->
-           Dom.removeChild body b;
-           Lwt.return m) in
-       Lwt.choose (List.map f ms)
+       begin
+         match ms with
+         | [m] -> Lwt.return m
+         | _ ->
+            let b, c = dialog () in
+            Dom.appendChild body b;
+            append_text c "You have a (new) yaku:";
+            List.iter (fun y -> append_text c @@ string_of_yaku y)
+                      (yaku_of_tori (player_of_game g).tori);
+            let f m =
+              let o = Html.createButton document in
+              Dom.appendChild c o;
+              o##.innerHTML := js (string_of_move m);
+              (catch_raise @@ Events.click o) >>= (fun _ ->
+                Dom.removeChild body b;
+                Lwt.return m) in
+            let ts = (List.map f ms) in
+            let h g _ = 
+              ignore (Drawer.show_tori_dialog (cards_of_tori (player_of_game g).tori));
+              Js._true in
+            let s = create_gap () in
+            Dom.appendChild c s;
+            let a = create_phony_a "View your torihuda" in
+            Dom.appendChild c a;
+            a##.onclick := Html.handler (h g);
+            let s = create_gap () in
+            Dom.appendChild c s;
+            let a' = create_phony_a "View your opponent's torihuda" in
+            Dom.appendChild c a';
+            a'##.onclick := Html.handler (h (swap g));
+            Lwt.pick ts
+       end
     | { phase = Awase1_phase _ } ->
        (catch_raise @@ choose_card (List.map (fun (Awase1 c) -> c) ms))
-         >>= (fun c -> Lwt.return (Awase1 c))
+       >>= (fun c -> Lwt.return (Awase1 c))
     | { phase = Awase2_phase c0 } ->
        (catch_raise @@ choose_card (List.map (fun (Awase2 (_, c)) -> c) ms))
-         >>= (fun c -> Lwt.return (Awase2 (c0, c))))
+       >>= (fun c -> Lwt.return (Awase2 (c0, c))))
 
 let human =
   { visible = true;
     name = "Human";
     choose_move   = human_choose_move }
 
-let rec ai =
+let worker : (Js.js_string Js.t, Js.js_string Js.t) Worker.worker Js.t option ref
+  = ref None
+let rec ai = 
   { visible = false;
     name = "Computer";
     choose_move = fun g _ -> (* Lwt.return (M.good_move g) *)
-                  Drawer.message
-                  @@ Printf.sprintf "%s is thinking..." ai.name;
-                  worker##postMessage (Json.output g);
-                  let ev = Html.Event.make "message" in
-                  Events.make_event ev worker >>=
-                    fun e ->
-                    let move = Json.unsafe_input e##.data in
-                    Drawer.message "";
-                    Lwt.return move }
+                  match !worker with
+                  | None -> failwith "uninitialized worker"
+                  | Some worker ->
+                     Drawer.message
+                     @@ Printf.sprintf "%s is thinking..." ai.name;
+                     worker##postMessage (Json.output g);
+                     let ev = Html.Event.make "message" in
+                     Events.make_event ev worker >>=
+                       fun e ->
+                       let move = Json.unsafe_input e##.data in
+                       Drawer.message "";
+                       Lwt.return move }
 
 let basanbon _ (c', c'', c''') =
   Drawer.unplace c';
   Drawer.unplace c'';
   Drawer.unplace c'''
-
-let print_list rightleader cs =
-  let h = hash cs in
-  let content = (List.fold_left (^) "" (List.map string_of_card cs)) in
-  match  rightleader with
-  | Some s ->
-     Printf.printf "<div style='float:right' id='hash%d'>%s</br>%s</div>" h s content
-  | None -> Printf.printf "<div id = 'hash%d'>%s</div>" h content
-
-let print_tori tori =
-  List.iter (fun y -> Printf.printf "%s" (string_of_yaku y)) (yaku_of_tori tori);
-  print_list None (cards_of_tori tori)
 
 let rec loop_play p (g : play_t game)  =
   if p.visible then
@@ -376,25 +434,22 @@ let rec loop_play p (g : play_t game)  =
        | GExist ({ phase = Awase1_phase c } as g) ->
           begin
             Drawer.reveal_card c;
-            (catch_raise @@ Lwt_js.sleep 0.5) >>= fun () ->
+            Sound.play ();
             let ms = moves g in
             match ms with
             | [Awase1_nop] ->
-               Printf.printf "%s is getting no card.\n" p.name;
+               (catch_raise @@ Lwt_js.sleep 0.5) >>= fun () ->
                loop_awase1 p g Awase1_nop
             | [(Awase1_basanbon (c', c'', c''')) as m] ->
+               (catch_raise @@ Lwt_js.sleep 0.5) >>= fun () ->
                basanbon p (c', c'', c''');
                loop_awase1 p g m
             | [(Awase1 c') as m] ->
-               Printf.printf "%s is getting %s.\n" p.name (string_of_card c');
+               (catch_raise @@ Lwt_js.sleep 0.5) >>= fun () ->
                Drawer.unplace c';
                loop_awase1 p g m
             | [(Awase1 c1); (Awase1 c2)] ->
-               Printf.printf
-                 "There are two cards that match: %s and %s.\n"
-                 (string_of_card c1) (string_of_card c2);
                p.choose_move g ms >>= fun ((Awase1 c') as m) ->
-               Printf.printf "%s is getting %s.\n" p.name (string_of_card c');
                Drawer.unplace c';
                loop_awase1 p g m
             | _ -> failwith "loop_play: kaboom!"
@@ -404,24 +459,22 @@ and loop_awase1 p (g : awase1_t game) (m : awase1_t move) =
   | GExist ({ phase = Awase2_phase c; } as g) ->
      Drawer.align_tori (if p.visible then Drawer.y_human else Drawer.y_ai )
                        (cards_of_tori (player_of_game g).tori);
+     (catch_raise @@ Lwt_js.sleep 0.3) >>= fun () ->
      Drawer.reveal_card c;
-     Printf.printf "%s drew %s.\n" p.name (string_of_card c);
-     (catch_raise @@ Lwt_js.sleep 0.5) >>= fun () ->
+     Sound.play ();
      match moves g with
      | [Awase2_nop c] ->
-        Printf.printf "%s is getting no card.\n" p.name;
+        (catch_raise @@ Lwt_js.sleep 0.5) >>= fun () ->
         loop_awase2 p g (Awase2_nop c)
      | [(Awase2_basanbon (_, c', c'', c''')) as m] ->
+        (catch_raise @@ Lwt_js.sleep 0.5) >>= fun () ->
         basanbon p (c', c'', c''');
         loop_awase2 p g m
      | [(Awase2 (_, c')) as m] ->
-        Printf.printf "%s is getting %s.\n" p.name (string_of_card c');
+        (catch_raise @@ Lwt_js.sleep 0.5) >>= fun () ->
         Drawer.unplace c';
         loop_awase2 p g m
      | [Awase2 (_, c1); Awase2 (_, c2)] as ms ->
-        Printf.printf
-          "There are two cards that match: %s and %s.\n"
-          (string_of_card c1) (string_of_card c2);
         p.choose_move g ms >>= fun ((Awase2 (_, c')) as m) ->
         Printf.printf "%s is getting %s.\n" p.name (string_of_card c');
         Drawer.unplace c';
@@ -434,7 +487,7 @@ and loop_awase2 p (g : awase2_t game) (m : awase2_t move) =
     let b, c = dialog () in
     Dom.appendChild body b;
     append_text c "The game ended in draw.\n";
-    Events.click c >>= fun _ ->
+    Events.click b >>= fun _ ->
     Dom.removeChild body b;
     Lwt.return (p.name, 0) in
   let g = apply g m in
@@ -452,24 +505,26 @@ and loop_awase2 p (g : awase2_t game) (m : awase2_t move) =
   | GExist ({ phase = Play_phase } as g) ->
      loop_play (if p.visible then ai else human) g
   | GExist ({ phase = Koi_phase } as g) ->
-     Printf.printf "%s has a (new) yaku: \n" p.name;
-     (* print_tori (player_of_game g).tori; *)
-     Printf.printf "%s can now declare koi.\n" p.name;
      p.choose_move g (moves g) >>= (fun m ->
-       Printf.printf "%s chose %s.\n" p.name (match m with Koi -> "Koi" | _ -> "No_koi");
+       let b,c = dialog () in
+       Dom.appendChild body b;
+       append_text c
+       @@ Printf.sprintf "%s chose %s." p.name
+                         (match m with Koi -> "to declare koi" | _ -> "not to declare koi");
+       Events.click b >>= fun _ ->
+       Dom.removeChild body b;
        match apply g m with
        | GExist ({ phase = Play_phase } as g) ->
           loop_play (if p.visible then ai else human) g
        | GExist ({ phase = Winning_phase } as g) ->
           let tori = (player_of_game g).tori in
-          print_tori tori;
           let u = (util_of_tori tori) in
           let b, c = dialog () in
           Dom.appendChild body b;
           append_text c (Printf.sprintf "%s won with payoff %d:" p.name u);
           List.iter (fun y -> append_text c @@ string_of_yaku y)
                     (yaku_of_tori tori);
-          Events.click c >>= fun _ ->
+          Events.click b >>= fun _ ->
           Dom.removeChild body b;
           Lwt.return (p.name, u)
        | GExist ({ phase = Draw_phase }) -> k_draw ())
@@ -480,8 +535,25 @@ let start () =
     Js.Opt.get (document##getElementById (js "yomi"))
                (fun () -> assert false) in
   body##.style##.cssText := js "background: #5F3E35; color: white";
+  let t = catch_raise @@ Drawer.wait_for_bank () in
+  let f s =
+    worker := Some (Worker.create s :
+                      (Js.js_string Js.t, Js.js_string Js.t) Worker.worker Js.t) in
+  let b0 = Html.createButton document in
+  Dom.appendChild body b0;
+  b0##.innerHTML := js "Easy AI";
+  let t0 =
+    (catch_raise @@ Events.click b0) >>= fun _ ->
+    Lwt.return (f "sigotoninEasy.js") in
+  let b1 = Html.createButton document in
+  Dom.appendChild body b1;
+  b1##.innerHTML := js "Standard AI";
+  let t1 = 
+    (catch_raise @@ Events.click b1) >>= fun _ ->
+    Lwt.return (f "sigotoninStd.js") in
+  Lwt.pick [t0; t1] >>= fun () ->
   body##.innerHTML := js "Loading images...";
-  (catch_raise @@ Drawer.wait_for_bank ()) >>= (fun () ->
+  t >>= (fun () ->
     body##.innerHTML := js "";
     let rec loop b n acc =
       let s =
@@ -492,6 +564,7 @@ let start () =
       let g = init () in
       (* Drawer.make_place_human (if b then g.data.pii else g.data.pi).hand; *)
       Drawer.init_ba g.data.ba;
+      Sound.init ();
       loop_play (if b then ai else human) g >>= fun (name, po) ->
       loop (not b) (n + 1) (acc + (if name = human.name then po else -po)) in
     loop false 0 0)
