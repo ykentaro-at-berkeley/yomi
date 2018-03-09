@@ -3,7 +3,7 @@
 # js_of_ocaml window.byte
 # js_of_ocaml sigotonin.byte
 
-ocamlbuild -cflags -annot,-g -lflag -g -use-ocamlfind -pkgs lwt,js_of_ocaml,js_of_ocaml-lwt,js_of_ocaml.ppx window0.byte sigotoninEasy.byte sigotoninStd.byte canvas.byte ken.byte cai.byte kuttuki.native
+ocamlbuild -cflags -annot,-g -lflag -g -use-ocamlfind -pkgs lwt,js_of_ocaml,js_of_ocaml-lwt,js_of_ocaml.ppx window0.byte sigotoninEasy.byte sigotoninStd.byte canvas.byte ken.byte cai.byte
 errno=$?
 #js_of_ocaml --pretty window0.byte
 #js_of_ocaml --pretty canvas.byte
