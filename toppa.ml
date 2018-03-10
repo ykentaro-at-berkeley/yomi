@@ -399,8 +399,13 @@ let has_si hand =
       else loop (1 + m) in
   loop 1
 
+let rec take_drop_wo_si n xs0 =
+  let xs, xs' = List.take_drop n xs0 in
+  if has_si xs then take_drop_wo_si n xs0
+  else xs, xs'
+
 (* create a random game based on the current player's perspective *)
-let rec random : type a. a game -> a game =
+let random : type a. a game -> a game =
   fun g ->
   let p = player_of_game g in
   let cs_tori = cards_of_tori p.tori in
@@ -414,34 +419,57 @@ let rec random : type a. a game -> a game =
   let visible = additional @ p.hand @ g.data.ba @ cs_tori @ cs_tori' in
   let cs = diff_card' hana_karuta visible in
   let cs = Random.shuffle_list cs in
-  let hand, cs = List.take_drop (List.length p'.hand) cs in (* I'm not cheating! *)
+  let hand, cs = take_drop_wo_si (List.length p'.hand) cs in (* I'm not cheating! *)
   assert (List.length cs = List.length g.data.yama);
-  if has_si hand then (Printf.printf "Redealing\n"; random g)
-  else
-    let p' = { p' with hand = hand } in
-    let g = { g with data = { g.data with yama = cs } } in
-    swap (update_current_player (swap g) p')
+  let p' = { p' with hand = hand } in
+  let g = { g with data = { g.data with yama = cs } } in
+  swap (update_current_player (swap g) p')
 
-let rec init () =
+let deal n =
+  let cs = Random.shuffle_list hana_karuta in
+  let ba, cs = take_drop_wo_si 8 cs in
+  let rec loop a i cs =
+    if i >= n then a
+    else
+      let hand, cs = take_drop_wo_si 10 cs in
+      loop ((ba, hand) :: a) (i + 1) cs in
+  loop [] 0 cs
+
+(* let join (ba, hand) (ba', hand') = *)
+(*   assert (ba = ba'); *)
+(*   let empty = *)
+(*     { hikari = []; tane = []; tanzaku = []; kara = []; has_aristo = false  } in *)
+(*   let pi = { hand = hand; tori = empty; koi = None } in *)
+(*   let pii = { hand = hand'; tori = empty; koi = None } in *)
+(*   let yama = Random.shuffle_list (diff_card' hana_karuta (ba @ hand @ hand')) in *)
+(*   let data = { pi = pi; pii = pii; ba = ba; yama = yama; current = PI } in *)
+(*   { phase = Play_phase; data = data } *)
+  
+(* let init_from (ba, hand) = *)
+(*   let cs = diff_card' hana_karuta (ba @ hand) in *)
+(*   let cs = Random.shuffle_list cs in *)
+(*   let hand', _ = take_drop_wo_si 10 cs in (\* Toppa!!!! *\) *)
+(*   join (ba, hand) (ba, hand') *)
+
+(* let init () = *)
+(*   let cs = Random.shuffle_list hana_karuta in *)
+(*   let ba, cs = take_drop_wo_si 8 cs in *)
+(*   let hand, _ = take_drop_wo_si 10 cs in *)
+(*   init_from (ba, hand) *)
+
+let init () =
   let empty =
     { hikari = []; tane = []; tanzaku = []; kara = []; has_aristo = false  } in
   let cs = Random.shuffle_list hana_karuta in
-  let hand, cs = List.take_drop 10 cs in (* Toppa!!!! *)
-  if has_si hand then
-    (Printf.printf "Redealing\n"; init ())
-  else
+  let hand, cs = take_drop_wo_si 10 cs in (* Toppa!!!! *)
   let pi = { hand = hand; tori = empty; koi = None } in
-  let hand, cs = List.take_drop 10 cs in (* Toppa!!!! *)
-  if has_si hand then
-    (Printf.printf "Redealing\n"; init ())
-  else
+  let hand, cs = take_drop_wo_si 10 cs in (* Toppa!!!! *)
   let pii = { hand = hand; tori = empty; koi = None } in
-  let ba, yama = List.take_drop 8 cs in 
-  if has_si ba then
-    (Printf.printf "Redealing\n"; init ())
-  else
-    let data = { pi = pi; pii = pii; ba = ba; yama = yama; current = PI } in
-    { phase = Play_phase; data = data }
+  let ba, yama = take_drop_wo_si 8 cs in
+  let data = { pi = pi; pii = pii; ba = ba; yama = yama; current = PI } in
+  { phase = Play_phase; data = data }
+
+    
 
 module MCUCB1 (P : sig val param : float val limit : int end) = struct
   let param = P.param
