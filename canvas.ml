@@ -1,24 +1,6 @@
 open CommonUI
 open Toppa
 
-let make_ai name routine =
-  let worker : (Js.js_string Js.t, Js.js_string Js.t) Worker.worker Js.t
-    = Worker.create routine in
-  let rec ai = 
-    { visible = false;
-      name = name;
-      choose_move = fun g _ -> (* Lwt.return (M.good_move g) *)
-                    Drawer.message
-                    @@ Printf.sprintf "%s is thinking..." ai.name;
-                    worker##postMessage (Json.output g);
-                    let ev = Html.Event.make "message" in
-                    Events.make_event ev worker >>=
-                      fun e ->
-                      let move = Json.unsafe_input e##.data in
-                      Drawer.message "";
-                      Lwt.return move } in
-  ai
-
 let start () =
   Random.self_init ();
   let body =

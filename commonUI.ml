@@ -405,6 +405,24 @@ let human =
     name = "Human";
     choose_move   = human_choose_move }
 
+let make_ai ?(visible = false) name routine =
+  let worker : (Js.js_string Js.t, Js.js_string Js.t) Worker.worker Js.t
+    = Worker.create routine in
+  let rec ai = 
+    { visible;
+      name = name;
+      choose_move = fun g _ -> (* Lwt.return (M.good_move g) *)
+                    Drawer.message
+                    @@ Printf.sprintf "%s is thinking..." ai.name;
+                    worker##postMessage (Json.output g);
+                    let ev = Html.Event.make "message" in
+                    Events.make_event ev worker >>=
+                      fun e ->
+                      let move = Json.unsafe_input e##.data in
+                      Drawer.message "";
+                      Lwt.return move } in
+  ai
+
 module Make (S : sig val human : t val ai : t end) = struct
   open S
   let rec loop_play p (g : play_t game)  =
