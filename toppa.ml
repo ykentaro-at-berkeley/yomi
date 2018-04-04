@@ -401,7 +401,7 @@ let has_si hand =
 
 let rec take_drop_wo_si n xs0 =
   let xs, xs' = List.take_drop n xs0 in
-  if has_si xs then take_drop_wo_si n xs0
+  if has_si xs then take_drop_wo_si n (Random.shuffle_list xs0)
   else xs, xs'
 
 (* create a random game based on the current player's perspective *)
@@ -435,39 +435,39 @@ let deal n =
       loop ((ba, hand) :: a) (i + 1) cs in
   loop [] 0 cs
 
-(* let join (ba, hand) (ba', hand') = *)
-(*   assert (ba = ba'); *)
-(*   let empty = *)
-(*     { hikari = []; tane = []; tanzaku = []; kara = []; has_aristo = false  } in *)
-(*   let pi = { hand = hand; tori = empty; koi = None } in *)
-(*   let pii = { hand = hand'; tori = empty; koi = None } in *)
-(*   let yama = Random.shuffle_list (diff_card' hana_karuta (ba @ hand @ hand')) in *)
-(*   let data = { pi = pi; pii = pii; ba = ba; yama = yama; current = PI } in *)
-(*   { phase = Play_phase; data = data } *)
-  
-(* let init_from (ba, hand) = *)
-(*   let cs = diff_card' hana_karuta (ba @ hand) in *)
-(*   let cs = Random.shuffle_list cs in *)
-(*   let hand', _ = take_drop_wo_si 10 cs in (\* Toppa!!!! *\) *)
-(*   join (ba, hand) (ba, hand') *)
-
-(* let init () = *)
-(*   let cs = Random.shuffle_list hana_karuta in *)
-(*   let ba, cs = take_drop_wo_si 8 cs in *)
-(*   let hand, _ = take_drop_wo_si 10 cs in *)
-(*   init_from (ba, hand) *)
-
-let init () =
+let join (ba, hand) (ba', hand') =
+  assert (ba = ba');
   let empty =
     { hikari = []; tane = []; tanzaku = []; kara = []; has_aristo = false  } in
-  let cs = Random.shuffle_list hana_karuta in
-  let hand, cs = take_drop_wo_si 10 cs in (* Toppa!!!! *)
   let pi = { hand = hand; tori = empty; koi = None } in
-  let hand, cs = take_drop_wo_si 10 cs in (* Toppa!!!! *)
-  let pii = { hand = hand; tori = empty; koi = None } in
-  let ba, yama = take_drop_wo_si 8 cs in
+  let pii = { hand = hand'; tori = empty; koi = None } in
+  let yama = Random.shuffle_list (diff_card' hana_karuta (ba @ hand @ hand')) in
   let data = { pi = pi; pii = pii; ba = ba; yama = yama; current = PI } in
   { phase = Play_phase; data = data }
+  
+let init_from (ba, hand) =
+  let cs = diff_card' hana_karuta (ba @ hand) in
+  let cs = Random.shuffle_list cs in
+  let hand', _ = take_drop_wo_si 10 cs in (* Toppa!!!! *)
+  join (ba, hand) (ba, hand')
+
+let init () =
+  let cs = Random.shuffle_list hana_karuta in
+  let ba, cs = take_drop_wo_si 8 cs in
+  let hand, _ = take_drop_wo_si 10 cs in
+  init_from (ba, hand)
+
+(* let init () = *)
+(*   let empty = *)
+(*     { hikari = []; tane = []; tanzaku = []; kara = []; has_aristo = false  } in *)
+(*   let cs = Random.shuffle_list hana_karuta in *)
+(*   let hand, cs = take_drop_wo_si 10 cs in (\* Toppa!!!! *\) *)
+(*   let pi = { hand = hand; tori = empty; koi = None } in *)
+(*   let hand, cs = take_drop_wo_si 10 cs in (\* Toppa!!!! *\) *)
+(*   let pii = { hand = hand; tori = empty; koi = None } in *)
+(*   let ba, yama = take_drop_wo_si 8 cs in *)
+(*   let data = { pi = pi; pii = pii; ba = ba; yama = yama; current = PI } in *)
+(*   { phase = Play_phase; data = data } *)
 
     
 
@@ -527,11 +527,11 @@ module MCUCB1 (P : sig val param : float val limit : int end) = struct
       ts.(i).sum_payoff <- ts.(i).sum_payoff +. po;
       ts.(i).n_trials <- ts.(i).n_trials + 1
 
-  let  good_move : type a. a game -> a move =
+  let  good_move' : type a. a game -> (a move * float) =
     fun g ->
     let ms = moves g in
     match ms with
-    | [m] -> m
+    | [m] -> (m, nan)
     | _ ->
        let n = (List.length ms) in
        let ts =
@@ -564,9 +564,9 @@ module MCUCB1 (P : sig val param : float val limit : int end) = struct
                loop (i + 1) in
            loop 0
        end;
-       let i =
+       let i, po_acc =
          let rec loop i (i_acc, po_acc) =
-           if i >= n then i_acc
+           if i >= n then i_acc, po_acc
            else
              let s = ts.(i) in
              let po_exp = (s.sum_payoff /. float_of_int s.n_trials) in
@@ -576,7 +576,9 @@ module MCUCB1 (P : sig val param : float val limit : int end) = struct
          loop 0 (-1, neg_infinity) in
        if i < 0 then
          failwith "good_move: No available moves???"
-       else List.nth ms i
+       else List.nth ms i, po_acc
+  let  good_move : type a. a game -> a move =
+    fun g -> fst (good_move' g)
 end
 
 module Names = struct (* Bad copy & pasting !! *)
@@ -606,11 +608,11 @@ let string_of_card c =
   let string_of_yaku y =
     let f = function
       | Gokoo -> "Gokô"
-      | Sikoo -> "(Hon-) Sikô"
-      | Amesikoo -> "(Ame-) Sikô"
-      | Akatan -> "Akatan (Sugawara)"
+      | Sikoo -> "Honsikô"
+      | Amesikoo -> "Amesikô"
+      | Akatan -> "Sugawara"
       | Aotan -> "Aotan"
-      | Nanatan _ -> "Sititan (Syônana)"
+      | Nanatan _ -> "Syônana"
       (* | Inosikatyoo -> "Ino-sika-tyô" *)
       | Kara _ -> "Kara" in
     Printf.sprintf "%s (%d)" (f y) (util_of_yaku y)

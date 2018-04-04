@@ -224,16 +224,19 @@ module Drawer = struct
   let set_z c z =
     let _, canv = get_repr c in set_z' canv z
 
+  let append_cards e cs =
+    let f c =
+      let canv = make_repr_internal c in
+      Dom.appendChild e canv in
+    List.iter f cs
+
   let show_tori_dialog (cs : card' list ) =
     let body =
       Js.Opt.get (document##getElementById (js "yomi"))
                  (fun () -> assert false) in
     let b, cont = dialog () in
     Dom.appendChild body b;
-    let f c =
-      let canv = make_repr_internal c in
-      Dom.appendChild cont canv in
-    List.iter f cs;
+    append_cards cont cs;
     (catch_raise @@ Events.click b) >>= (fun _ ->
       Dom.removeChild body b;
       Lwt.return ())
