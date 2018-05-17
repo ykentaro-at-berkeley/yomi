@@ -24,7 +24,8 @@ type tori =
     tanzaku : tanzaku_t card list;
     tane :  tane_t card list;
     kara :  kara_t card list;
-    has_aristo : bool }
+    has_aristo : bool;
+    has_oni : bool }
 
 type yaku =
   | Gokoo | Sikoo | Amesikoo 
@@ -86,15 +87,15 @@ let yaku_of_tanzaku has_aristo (cs : tanzaku_t card list) =
 (*   (if has_ino && has_sika && has_tyoo then [Inosikatyoo] else []) *)
 (*   @ (if l >= 5 then [Tane (l - 5)] else []) *)
 
-let yaku_of_kara (cs : kara_t card list)  =
-  let l = List.length cs in
+let yaku_of_kara has_oni (cs : kara_t card list)  =
+  let l = List.length cs + (if has_oni then 1 else 0) in
   if l >= 12 then  [Kara (l - 12)] else []
 
 let yaku_of_tori t =
   yaku_of_hikari t.has_aristo t.hikari
   @ yaku_of_tanzaku t.has_aristo t.tanzaku
   (* @ yaku_of_tane t.tane *)
-  @ yaku_of_kara t.kara 
+  @ yaku_of_kara t.has_oni t.kara 
 
 type util = int
 
@@ -138,13 +139,18 @@ let is_aristo' = function
   | (11, Four) -> true
   | _ -> false
 
+let is_oni' = function
+  | (11, One) -> true
+  | _ -> false
+
 let cons (c' : card') (t : tori) =
   let CExist c = classify_card c' in
   match c with
   | Hikari_card _ -> { t with hikari = c::t.hikari; 
                               has_aristo = t.has_aristo || is_aristo' c' }
   | Tane_card _ -> { t with tane = c::t.tane }
-  | Tanzaku_card _ -> { t with tanzaku = c::t.tanzaku }
+  | Tanzaku_card _ -> { t with tanzaku = c::t.tanzaku;
+                               has_oni = t.has_oni || is_oni' c' }
   | Kara_card _ -> { t with kara = c::t.kara }
   
 
@@ -438,7 +444,8 @@ let deal n =
 let join (ba, hand) (ba', hand') =
   assert (ba = ba');
   let empty =
-    { hikari = []; tane = []; tanzaku = []; kara = []; has_aristo = false  } in
+    { hikari = []; tane = []; tanzaku = []; kara = [];
+      has_aristo = false; has_oni = false } in
   let pi = { hand = hand; tori = empty; koi = None } in
   let pii = { hand = hand'; tori = empty; koi = None } in
   let yama = Random.shuffle_list (diff_card' hana_karuta (ba @ hand @ hand')) in
