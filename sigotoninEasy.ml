@@ -1,1 +1,1 @@
-module M = Sigotonin0.Make(struct let limit = 2500 end)
+module M = Sigotonin0.Make(struct let limit = 1500 end)

@@ -82,15 +82,16 @@ module Drawer = struct
 
   let init s body =
     cards := [];
+    let ds = Html.createDiv document in
+    Dom.appendChild body ds;
+    ds##.innerHTML := js s;
+    Dom.appendChild body mes;
+    mes##.innerHTML := js "";
     div##.innerHTML := js "";
+    div##.style##.position := js "relative";
     div##.style##.width := js_sprintf "%dpx" (card_width * 12);
     div##.style##.height := js_sprintf "%dpx" (card_width * 8);
-    Dom.appendChild body div;
-    let ds = Html.createDiv document in
-    Dom.appendChild div ds;
-    ds##.innerHTML := js s;
-    mes##.innerHTML := js "";
-    Dom.appendChild div mes
+    Dom.appendChild body div
 
   (* let compare r r' = Pervasives.compare r.z r'.z *)
 

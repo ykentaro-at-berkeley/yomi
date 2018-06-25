@@ -59,14 +59,23 @@ module List = struct
   let diff ?(eq=(=)) xs ys =
     let f xs y = remove ~eq:eq ~x:y xs in
     List.fold_left f xs ys
+
+  let is_included xs ys =
+    let rec loop = function
+      | [] -> true
+      | x::xs ->
+         if List.mem x ys then loop xs else false in
+    loop xs
 end
 module Random = struct
   include Random
 
   (* mine *)             
-  let randomth_list l =
-    let n = List.length l in
-    List.nth l (Random.int n)
+  let randomth_list = function
+    | [] -> failwith "randomth_list: empty list"
+    | l ->
+       let n = List.length l in
+       List.nth l (Random.int n)
 
   let rec shuffle_list = function
     | [] -> []
