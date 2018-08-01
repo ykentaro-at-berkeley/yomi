@@ -22,6 +22,7 @@ type rule = Till_end | Abort_when_yaku
 type payoff_type = Difference | Absolute
 type oni_type = Leave_rest | Take_rest
 type player_id = PI | PII
+type deal_type = No_basi | No_basanbon
 
 module type GAME = sig
   val util_of_card : card -> util
@@ -34,6 +35,8 @@ module type GAME = sig
   val n_te : int
   val n_ba : int
   val handle_sarasi : player_id -> card list -> (util * (card list))
+  val deal_type : deal_type
+  val bound : int option
 end
 module Make (G : GAME) = struct
 
@@ -166,7 +169,7 @@ module Make (G : GAME) = struct
            match awase c data.ba with
            | [] -> ms
            | x::y::z::w::_ -> failwith "moves: too many matching cards"
-           | x::y::z::[] -> Awase1_basanbon (x, y, z) :: ms
+           | x::y::z::[] -> Awase1_basanbon (x, y, z) :: ms 
            | x::y::[] -> Awase1 x :: Awase1 y :: ms
            | x::[] -> Awase1 x :: ms in
          match ms with
@@ -202,17 +205,22 @@ module Make (G : GAME) = struct
     | { phase = Winning_phase } -> failwith "moves: applied to a winning game"
     | { phase = Thru_phase } -> failwith "moves: applied to a thru game"
 
+  let bound =
+    match G.bound with
+    | None -> fun x -> x
+    | Some n -> fun (x : int) -> min x n
+
   let payoff_winning : winning_t game -> util * util
     = fun { data = { pi = { tori }; pii = { tori = tori' }}} ->
-    (util_of_tori tori, util_of_tori tori' )
+    (bound (util_of_tori tori), bound (util_of_tori tori'))
 
   let payoff_thru : thru_t game -> util * util
     = fun { data = { pi = { tori }; pii = { tori = tori' }}} ->
     let u, u' = (util_of_tori ~thru:true tori, util_of_tori ~thru:true tori') in
     match G.payoff_type with
     | Absolute -> (u, u')
-    | Difference when u > u' -> (u - u', 0)
-    | _ -> (0, u' - u)
+    | Difference when u > u' -> (bound (u - u'), 0)
+    | _ -> (0, bound (u' - u))
 
   let payoff : type a. a game -> (util * util) option
     = function
@@ -261,7 +269,7 @@ module Make (G : GAME) = struct
   let check_thru ({ phase = Play_phase; data = data } as g) =
     match data.pi.hand, data.pii.hand with
     | [], [] -> GExist { phase = Thru_phase; data = data }
-    | _ -> GExist g
+    | _ -> GExist { g with data = swap' data}
 
   let apply_awase2 { phase = Awase2_phase c; data = data } m =
     let p = player_of_game' data in
@@ -274,7 +282,7 @@ module Make (G : GAME) = struct
       let ys = yaku_results_of_tori p.tori in
       match ys with
       | [] ->
-         (check_thru { phase = Play_phase; data = swap' data })
+         (check_thru { phase = Play_phase; data = data })
       | _ -> GExist { phase = Winning_phase; data = data } in
     match m with
     | Awase2_nop _ -> (* need to add it *)
@@ -313,21 +321,27 @@ module Make (G : GAME) = struct
            List.map (fun m -> (Obj.magic m, r)) [0;1;2;3;4;5;6;7;8;9;10;11])
                 [One;Two;Three;Four]
 
-  let has_si (hand : card list) =
+  let has k (hand : card list) =
     let rec loop m =
       if m >= 12 then false
       else
         if
           let f acc (m', _) = if (Obj.magic m) = m' then 1 + acc else acc in
-          4 <= List.fold_left f 0 hand
+          k <= List.fold_left f 0 hand
         then true
         else loop (1 + m) in
     loop 0
 
-  let rec take_drop_wo_si n xs0 =
+  let rec take_drop_wo k n xs0 =
     let xs, xs' = List.take_drop n xs0 in
-    if has_si xs then take_drop_wo_si n (Random.shuffle_list xs0)
+    if has k xs then take_drop_wo k n (Random.shuffle_list xs0)
     else xs, xs'
+
+  let take_drop_wo_si n xs0 = take_drop_wo 4 n xs0
+  let take_drop_for_ba =
+    match G.deal_type with
+    | No_basanbon -> fun n xs0 -> take_drop_wo 3 n xs0
+    | No_basi -> take_drop_wo_si
 
   (* create a random game based on the current player's perspective *)
   let random : type a. a game -> a game =
@@ -385,7 +399,7 @@ module Make (G : GAME) = struct
 
   let init () =
     let cs = Random.shuffle_list hana_karuta in
-    let ba, cs = take_drop_wo_si G.n_ba cs in
+    let ba, cs = take_drop_for_ba G.n_ba cs in
     let hand, _ = take_drop_wo_si G.n_te cs in
     init_from (ba, hand)
 

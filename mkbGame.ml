@@ -52,3 +52,6 @@ let n_te = 8
 
 let handle_sarasi _ cs =
   0, List.filter (is_oni `Te) cs
+
+let deal_type = No_basanbon
+let bound = Some 200                  

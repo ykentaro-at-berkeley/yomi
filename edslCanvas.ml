@@ -265,8 +265,8 @@ module Make (G : Edsl.GAME) = struct
         let _, canv = get_repr c in
         canv##.onclick :=
           Html.handler (fun _ -> ignore (show_tori_dialog cs); Js._true);
-        (x +. dx, z + 1) in
-      ignore (List.fold_left f (float x_tori, 1) cs)
+        (x +. dx, z - 1) in
+      ignore (List.fold_left f (float x_tori, 1 + List.length cs) cs)
 
     let align_tori (y : [`AI | `Human]) cs =
       align_tori' (y_of_polyvar y) (List.sort compare' cs)
@@ -474,9 +474,12 @@ module Make (G : Edsl.GAME) = struct
        let b, c = dialog () in
        Dom.appendChild body b;
        append_text c (Printf.sprintf
-                        "%s won with payoff %d.\n" p.name
+                        "%s won with payoff %d:\n" p.name
                         (util_of_yaku_results
                            (yaku_results_of_tori (player_of_game g).tori)));
+       let f (s, u) =
+         append_text c (Printf.sprintf "%s (%d)\n" s u) in
+       List.iter f (yaku_results_of_tori (player_of_game g).tori);
        Events.click b >>= fun _ ->
        Dom.removeChild body b;
        Lwt.return (ui, uii)
