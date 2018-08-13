@@ -45,6 +45,7 @@ let yaku = [sikoo; itinisan; aotan; akatan; botankiri; ganbo]
 
 let yaku_type = Simple
 let yaku_join_type = Conditional
+let rule = Abort_when_yaku
 let payoff_type = Difference
 let oni_type = Leave_rest
 let n_ba = 8
