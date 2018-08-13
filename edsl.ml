@@ -29,6 +29,7 @@ module type GAME = sig
   val yaku : yaku list
   val yaku_type : yaku_type
   val yaku_join_type : yaku_join_type
+  val rule : rule
   val payoff_type : payoff_type
   val oni_type : oni_type
   val is_oni : [`Te | `Mekuri | `Ba] -> card -> bool
@@ -37,6 +38,7 @@ module type GAME = sig
   val handle_sarasi : player_id -> card list -> (util * (card list))
   val deal_type : deal_type
   val bound : int option
+  module UCB1 : sig val limit : int val param : float end
 end
 module Make (G : GAME) = struct
 
@@ -75,15 +77,25 @@ module Make (G : GAME) = struct
        t.memo <- Some ys;
        ys
 
+  let util_of_tori0 cs = 
+    let f s c = s + G.util_of_card c in
+    List.fold_left f 0 cs.data
+
   let util_of_tori =
     match G.yaku_join_type with
-    | Sum -> failwith "not implemented"
+    | Sum ->
+       fun ?(thru = false) cs ->
+        let _ = thru in
+        let u = util_of_tori0 cs in
+        let u' =
+          let ys = yaku_results_of_tori cs in
+          let f s y = s + util_of_yaku_result y in
+          List.fold_left f 0 ys in
+        u + u'
     | Conditional ->
        fun ?(thru = false) cs ->
        match yaku_results_of_tori cs with
-       | [] when thru ->
-          let f s c = s + G.util_of_card c in
-          List.fold_left f 0 cs.data
+       | [] when thru -> util_of_tori0 cs 
        | [] when not thru -> 0
        | ys ->
           let f s y = s + util_of_yaku_result y in
@@ -279,11 +291,14 @@ module Make (G : GAME) = struct
       { data with ba = diff_card data.ba cs } in
     let k data =
       let p = (player_of_game' data) in
-      let ys = yaku_results_of_tori p.tori in
-      match ys with
-      | [] ->
-         (check_thru { phase = Play_phase; data = data })
-      | _ -> GExist { phase = Winning_phase; data = data } in
+      match G.rule with
+      | Till_end -> (check_thru { phase = Play_phase; data = data })
+      | Abort_when_yaku ->
+         let ys = yaku_results_of_tori p.tori in
+         match ys with
+         | [] ->
+            (check_thru { phase = Play_phase; data = data })
+         | _ -> GExist { phase = Winning_phase; data = data } in
     match m with
     | Awase2_nop _ -> (* need to add it *)
        k { data with ba = c::data.ba }

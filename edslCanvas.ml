@@ -366,7 +366,7 @@ module Make (G : Edsl.GAME) = struct
   let make_ai ?(visible = false) name routine =
     (* let worker : (Js.js_string Js.t, Js.js_string Js.t) Worker.worker Js.t *)
     (*   = Worker.create routine in *)
-    let module M = MCUCB1 (struct let limit = 2000 let param = 300.0 end) in
+    let module M = MCUCB1 (G.UCB1) in
     let rec ai = 
       { visible;
         name = name;
@@ -493,19 +493,19 @@ module Make (G : Edsl.GAME) = struct
                  (fun () -> assert false) in
     body##.style##.cssText := js "background: #5F3E35; color: white";
     let t = catch_raise @@ Drawer.wait_for_bank () in
-    let b0 = Html.createButton document in
-    Dom.appendChild body b0;
-    b0##.innerHTML := js "Easy AI";
-    let t0 =
-      (catch_raise @@ Events.click b0) >>= fun _ ->
-      Lwt.return "sigotoninEasy.js" in
-    let b1 = Html.createButton document in
-    Dom.appendChild body b1;
-    b1##.innerHTML := js "Standard AI";
-    let t1 = 
-      (catch_raise @@ Events.click b1) >>= fun _ ->
-      Lwt.return "sigotoninStd.js" in
-    Lwt.pick [t0; t1] >>= fun routine ->
+    (* let b0 = Html.createButton document in *)
+    (* Dom.appendChild body b0; *)
+    (* b0##.innerHTML := js "Easy AI"; *)
+    (* let t0 = *)
+    (*   (catch_raise @@ Events.click b0) >>= fun _ -> *)
+    (*   Lwt.return "sigotoninEasy.js" in *)
+    (* let b1 = Html.createButton document in *)
+    (* Dom.appendChild body b1; *)
+    (* b1##.innerHTML := js "Standard AI"; *)
+    (* let t1 =  *)
+    (*   (catch_raise @@ Events.click b1) >>= fun _ -> *)
+    (*   Lwt.return "sigotoninStd.js" in *)
+    (* Lwt.pick [t0; t1] >>= fun routine -> *)
     body##.innerHTML := js "Loading images...";
     t >>= (fun () ->
       body##.innerHTML := js "";
@@ -519,7 +519,7 @@ module Make (G : Edsl.GAME) = struct
         (* Drawer.make_place_human (if b then g.data.pii else g.data.pi).hand; *)
         Drawer.init_ba g.data.ba;
         Sound.init ();
-        let ai = make_ai "Computer" routine in
+        let ai = make_ai "Computer" "routine" in
         let pi = if b then ai else human in
         begin
           if b then Drawer.make_place `AI g.data.pi.sarasi
