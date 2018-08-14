@@ -23,6 +23,7 @@ type payoff_type = Difference | Absolute
 type oni_type = Leave_rest | Take_rest
 type player_id = PI | PII
 type deal_type = No_basi | No_basanbon
+type megati = Megati_none | Megati_thru of int
 
 module type GAME = sig
   val util_of_card : card -> util
@@ -38,6 +39,7 @@ module type GAME = sig
   val handle_sarasi : player_id -> card list -> (util * (card list))
   val deal_type : deal_type
   val bound : int option
+  val megati : megati
   module UCB1 : sig val limit : int val param : float end
 end
 module Make (G : GAME) = struct
@@ -229,8 +231,15 @@ module Make (G : GAME) = struct
   let payoff_thru : thru_t game -> util * util
     = fun { data = { pi = { tori }; pii = { tori = tori' }}} ->
     let u, u' = (util_of_tori ~thru:true tori, util_of_tori ~thru:true tori') in
+    let u, u' =
+      match G.megati with
+      | Megati_thru n ->
+         if u > u' then (n, 0)
+         else if u < u' then (0, n)
+         else (0, 0)
+      | _ -> u, u' in
     match G.payoff_type with
-    | Absolute -> (u, u')
+    | Absolute -> (bound u, bound u')
     | Difference when u > u' -> (bound (u - u'), 0)
     | _ -> (0, bound (u' - u))
 

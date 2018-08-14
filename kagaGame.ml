@@ -40,6 +40,7 @@ let handle_sarasi _ _ =  0, []
 
 let deal_type = No_basi
 let bound = None
+let megati = Megati_none
 
 module UCB1 = struct
   let limit = 2000
