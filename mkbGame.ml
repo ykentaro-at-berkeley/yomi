@@ -47,6 +47,7 @@ let yaku_type = Simple
 let yaku_join_type = Conditional
 let rule = Abort_when_yaku
 let payoff_type = Difference
+let megati = Megati_none
 let oni_type = Leave_rest
 let n_ba = 8
 let n_te = 8
@@ -56,3 +57,8 @@ let handle_sarasi _ cs =
 
 let deal_type = No_basanbon
 let bound = Some 200                  
+
+module UCB1 = struct
+  let limit = 2000
+  let param = 200.
+end
