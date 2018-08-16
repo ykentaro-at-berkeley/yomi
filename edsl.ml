@@ -473,8 +473,8 @@ module Make (G : GAME) = struct
       let { data = { current = p }} = game in
       let tot =
         let f tot { n_trials = n } = tot + n in
-        Array.fold_left f 0 ts in
-      let (i, _) =
+        Array.fold_left f 0 ts in 
+     let (i, _) =
         let rec n = Array.length ts in
         let rec loop i (i_acc,  v_acc) =
           if i >= n then (i_acc, v_acc)
@@ -483,10 +483,13 @@ module Make (G : GAME) = struct
             if n_trials = 0 then
               loop (i + 1) (i, infinity)
             else
-              let f_trials = (float_of_int n_trials) in
               let v =
-                sum_payoff /. f_trials
-                +. param  *. sqrt (log (float_of_int tot) /. f_trials) in
+                let f_trials = (float_of_int n_trials) in
+                match ms with
+                | [_; _] -> ~-. f_trials
+                | _ ->
+                   sum_payoff /. f_trials
+                     +. param  *. sqrt (log (float_of_int tot) /. f_trials) in
               begin
                 (* Printf.printf "%f\n" v; *)
                 if v > v_acc then
