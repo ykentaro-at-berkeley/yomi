@@ -1,7 +1,12 @@
 open Edsl
 let is_oni _ _ = false
 
-let util_of_card (m, _) = 0
+let util_of_card = function
+  | (Yanagi, Four) | (Kiri, Four) -> 20
+  | (Kiri, _) -> 5
+  | (Yanagi, Three) -> 10
+  | (Yanagi, Two) -> 5
+  | _ -> 0
 
 let f_sikoo = function
   | (Matu, Four) | (Sakura, Four) | (Susuki, Four) | (Kiri, Four) -> true
@@ -25,8 +30,8 @@ let make_sima u m =
 let yaku =
   [sikoo; aotan; akatan]
   @ (List.map (fun m -> make_sima 20 m)
-       [Matu; Ume; Sakura; Huzi; Ayame; Botan; Hagi; Susuki; Kiku; Momizi])
-  @ [make_sima 55 Yanagi; make_sima 55 Kiri]
+       [Matu; Ume; Sakura; Huzi; Ayame; Botan; Hagi; Susuki; Kiku; Momizi;
+        Yanagi; Kiri])
 
 let yaku_type = Simple
 let yaku_join_type = Sum
