@@ -14,9 +14,9 @@ let util_of_card = function (* Sudaosi *)
 let is_tan'  = function
   | (Yanagi, _) -> true
   | c -> util_of_card c = 1
-let rokutan = "Rokutan", Count (5, 6, is_tan')
+let ntan = "Sititan", Count (5, 7, is_tan')
 
-let yaku = [rokutan]
+let yaku = [ntan]
 
 let yaku_type = Simple
 let yaku_join_type = Conditional
@@ -32,7 +32,9 @@ let deal_type = No_basi
 let megati = Megati_thru 3
 let bound = None
 
+let remote_url = "https://www.ocf.berkeley.edu/~ykentaro/yomi/remoteRokutan.cgi"
+
 module UCB1 = struct
-  let limit = 2000
-  let param = 5.
+  let limit = 5000
+  let param = 5. *. sqrt 2.
 end

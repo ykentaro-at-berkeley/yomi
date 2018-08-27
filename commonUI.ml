@@ -80,6 +80,12 @@ module Drawer = struct
 
   let mes = Html.createDiv document
 
+  let message = function
+    | "" ->
+       mes##.innerHTML := js "&nbsp;"
+    | s ->
+       mes##.innerHTML := js s
+
   let init s body =
     cards := [];
     let ds = Html.createDiv document in
@@ -87,6 +93,7 @@ module Drawer = struct
     ds##.innerHTML := js s;
     Dom.appendChild body mes;
     mes##.innerHTML := js "";
+    message "";
     div##.innerHTML := js "";
     div##.style##.position := js "relative";
     div##.style##.width := js_sprintf "%dpx" (card_width * 12);
@@ -275,8 +282,6 @@ module Drawer = struct
   let set_attention c b =
     let _, canv = get_repr c in set_attention' canv b
 
-  let message s =
-    mes##.innerHTML := js s
 end
 
 module Sound = struct
@@ -410,22 +415,31 @@ let human =
     choose_move   = human_choose_move }
 
 let make_ai ?(visible = false) name routine =
-  let worker : (Js.js_string Js.t, Js.js_string Js.t) Worker.worker Js.t
-    = Worker.create routine in
-  let rec ai = 
-    { visible;
-      name = name;
-      choose_move = fun g _ -> (* Lwt.return (M.good_move g) *)
-                    Drawer.message
-                    @@ Printf.sprintf "%s is thinking..." ai.name;
-                    worker##postMessage (Json.output g);
-                    let ev = Html.Event.make "message" in
-                    Events.make_event ev worker >>=
-                      fun e ->
-                      let move = Json.unsafe_input e##.data in
-                      Drawer.message "";
-                      Lwt.return move } in
-  ai
+  match routine with
+  | `Worker routine ->
+     let worker : (Js.js_string Js.t, Js.js_string Js.t) Worker.worker Js.t
+       = Worker.create routine in
+     { visible;
+       name = name;
+       choose_move =
+         fun g _ ->
+         Drawer.message @@ Printf.sprintf "%s is thinking..." name;
+         worker##postMessage (Json.output g);
+         let ev = Html.Event.make "message" in
+         Events.make_event ev worker >>=
+           fun e ->
+           let move = Json.unsafe_input e##.data in
+           Drawer.message "";
+           Lwt.return move }
+  | `Remote url ->
+     { visible;
+       name = name;
+       choose_move =
+         fun g _ ->
+         Drawer.message @@ Printf.sprintf "%s is thinking..." name;
+         BinaryXHR.perform url g >>= fun m ->
+         Drawer.message "";
+         Lwt.return m }
 
 module Make (S : sig val human : t val ai : t end) = struct
   open S

@@ -2,26 +2,27 @@
 
 (* http://www.geocities.jp/xmbwq497/gihou/hanafuda-gihou1.html *)
 open MyStd
+open Typerep_lib.Std
 
 let (@) = List.rev_append
 
-type util = int
+type util = int [@@deriving typerep]
 type month =
   | Matu   | Ume   | Sakura
   | Huzi   | Ayame | Botan
   | Hagi   | Susuki| Kiku
-  | Momizi | Yanagi| Kiri
-type rank = One | Two | Three | Four
-type card = month * rank
+  | Momizi | Yanagi| Kiri [@@deriving typerep]
+type rank = One | Two | Three | Four [@@deriving typerep]
+type card = month * rank [@@deriving typerep]
 type yaku' = Count of util * int * (card -> bool)
 type yaku = string * yaku'
-type yaku_result = string * util
+type yaku_result = string * util [@@deriving typerep]
 type yaku_type = Simple | Deiri
 type yaku_join_type = Sum | Conditional
 type rule = Till_end | Abort_when_yaku
 type payoff_type = Difference | Absolute
 type oni_type = Leave_rest | Take_rest
-type player_id = PI | PII
+type player_id = PI | PII [@@deriving typerep]
 type deal_type = No_basi | No_basanbon
 type megati = Megati_none | Megati_thru of int
 
@@ -40,11 +41,13 @@ module type GAME = sig
   val deal_type : deal_type
   val bound : int option
   val megati : megati
+  val remote_url : string
   module UCB1 : sig val limit : int val param : float end
 end
 module Make (G : GAME) = struct
 
   type tori = { data : card list; mutable memo : yaku_result list option }
+        [@@deriving typerep]
 
   (* Do not want to use polymorphic eq function *)
   (* Idk why, but = emits that for rank *)
@@ -106,6 +109,7 @@ module Make (G : GAME) = struct
   let cons (c : card) (t : tori) = { data = c :: t.data; memo = None }
 
   type player = { hand : card list; tori : tori; sarasi : card list }
+        [@@deriving typerep]
 
   let other = function PI -> PII | PII -> PI
 
@@ -114,8 +118,8 @@ module Make (G : GAME) = struct
       ba : card list;
       yama : card list;
       pi : player;
-      pii : player }
-      
+      pii : player } [@@deriving typerep]
+
   type play_t
   type awase1_t
   type awase2_t
@@ -132,6 +136,18 @@ module Make (G : GAME) = struct
     { phase : 'a game_phase;
       data : game' }
 
+  (* Make sure to edit this module accordingly to the actual defns above *)
+  module For_typerep = struct
+    type game_phase =
+       | Play_phase
+       | Awase1_phase of card
+       | Awase2_phase of card
+       | Winning_phase
+       | Thru_phase of card [@@ deriving typerep]
+    type game = { phase : game_phase; data : game' } [@@ deriving typerep]
+  end
+  let packed_typerep_of_game = Some (Typerep.T For_typerep.typerep_of_game)
+                         
   let player_of_game' { current = c; pi = pi; pii = pii } =
     match c with
     | PI -> pi
@@ -441,9 +457,9 @@ module Make (G : GAME) = struct
 
               
 
-  module MCUCB1 (P : sig val param : float val limit : int end) = struct
-    let param = P.param
-    let limit = P.limit
+  module MCUCB1 = struct
+    let param = G.UCB1.param
+    let limit = G.UCB1.limit
                   
     let rec simple_playout : type a. player_id -> a game -> a move -> float =
       fun p g m ->

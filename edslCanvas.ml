@@ -255,18 +255,23 @@ module Make (G : Edsl.GAME) = struct
 
     let align_tori' y (cs : card list) =
       let inner =
-        Js.Optdef.get Html.window##.innerWidth (fun () -> assert false) in
-      let width = inner - x_tori - 10 in (* To cope with fp errors *)
-      let dx = (float width) /. (float @@ List.length cs) in
+        Js.Optdef.get Html.window##.innerWidth (fun () -> 1024) in
+      Printf.printf "inner = %d\n" inner;
+      let left =
+        let rect = div##getBoundingClientRect in
+        int_of_float rect##.left in
+      let width = inner - left - x_tori in
+      let dx = (float width) /. (float @@ 1 + List.length cs) in (* workaround *)
       let dx = min dx (float (card_width + gap)) in
-      let f (x, z) c =
-        set_coord c (int_of_float x) y;
+      Printf.printf "dx = %f\n" dx;
+      let f (n, z) c =
+        set_coord c (int_of_float ((float n) *. dx +. (float x_tori))) y;
         set_z c z;
         let _, canv = get_repr c in
         canv##.onclick :=
           Html.handler (fun _ -> ignore (show_tori_dialog cs); Js._true);
-        (x +. dx, z - 1) in
-      ignore (List.fold_left f (float x_tori, 1 + List.length cs) cs)
+        (n + 1, z - 1) in
+      ignore (List.fold_left f (0, 1 + List.length cs) cs)
 
     let align_tori (y : [`AI | `Human]) cs =
       align_tori' (y_of_polyvar y) (List.sort compare' cs)
@@ -366,13 +371,14 @@ module Make (G : Edsl.GAME) = struct
   let make_ai ?(visible = false) name routine =
     (* let worker : (Js.js_string Js.t, Js.js_string Js.t) Worker.worker Js.t *)
     (*   = Worker.create routine in *)
-    let module M = MCUCB1 (G.UCB1) in
+    let module M = MCUCB1 in
     let rec ai = 
       { visible;
         name = name;
         choose_move = fun g _ ->
-                      Lwt_js.sleep 0.5 >>= fun () ->
-                      Lwt.return (M.good_move g)
+                      BinaryXHR.perform routine g
+                      (* Lwt_js.sleep 0.5 >>= fun () -> *)
+                      (* Lwt.return (M.good_move g) *)
                       (* Drawer.message *)
                       (* @@ Printf.sprintf "%s is thinking..." ai.name; *)
                       (* worker##postMessage (Json.output g); *)
@@ -384,7 +390,7 @@ module Make (G : Edsl.GAME) = struct
                       (*   Lwt.return move *) } in
     ai
 
-  let ai = make_ai "Computer" "hoge.js"
+  let ai = make_ai "Computer" G.remote_url
 
   let rec loop_play p (g : play_t game)  =
     if p.visible then
@@ -519,7 +525,6 @@ module Make (G : Edsl.GAME) = struct
         (* Drawer.make_place_human (if b then g.data.pii else g.data.pi).hand; *)
         Drawer.init_ba g.data.ba;
         Sound.init ();
-        let ai = make_ai "Computer" "routine" in
         let pi = if b then ai else human in
         begin
           if b then Drawer.make_place `AI g.data.pi.sarasi

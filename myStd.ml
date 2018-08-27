@@ -55,6 +55,15 @@ module List = struct
     | _::l' -> drop (n-1) l'
   let take_drop n l = take n l, drop n l
                                      
+  let filter_map f l =
+    let rec recurse acc l = match l with
+      | [] -> List.rev acc
+      | x::l' ->
+         let acc' = match f x with | None -> acc | Some y -> y::acc in
+         recurse acc' l'
+    in recurse [] l
+  let keep_some l = filter_map (fun x->x) l
+
   (* my work *)
   let diff ?(eq=(=)) xs ys =
     let f xs y = remove ~eq:eq ~x:y xs in

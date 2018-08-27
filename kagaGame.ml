@@ -48,7 +48,7 @@ let bound = None
 let megati = Megati_none
 
 module UCB1 = struct
-  let limit = 2000
+  let limit = 3000
   let param = 610.0
 end
     

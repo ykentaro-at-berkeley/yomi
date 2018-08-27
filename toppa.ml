@@ -577,7 +577,7 @@ module MCUCB1 (P : sig val param : float val limit : int end) = struct
            else
              let s = ts.(i) in
              let po_exp = (s.sum_payoff /. float_of_int s.n_trials) in
-             Printf.printf "%d: %d %f\n" i s.n_trials po_exp;
+             Printf.fprintf stderr "%d: %d %f\n" i s.n_trials po_exp;
              if po_exp > po_acc then loop (i + 1) (i, po_exp)
              else loop (i + 1) (i_acc, po_acc) in
          loop 0 (-1, neg_infinity) in

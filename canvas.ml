@@ -8,23 +8,22 @@ let start () =
                (fun () -> assert false) in
   body##.style##.cssText := js "background: #5F3E35; color: white";
   let t = catch_raise @@ Drawer.wait_for_bank () in
-  let b0 = Html.createButton document in
-  Dom.appendChild body b0;
-  b0##.innerHTML := js "Easy AI";
-  let t0 =
+  let add_routine desc routine =
+    let b0 = Html.createButton document in
+    Dom.appendChild body b0;
+    b0##.innerHTML := js desc;
     (catch_raise @@ Events.click b0) >>= fun _ ->
-    Lwt.return "sigotoninEasy.js" in
-  let b1 = Html.createButton document in
-  Dom.appendChild body b1;
-  b1##.innerHTML := js "Standard AI";
-  let t1 = 
-    (catch_raise @@ Events.click b1) >>= fun _ ->
-    Lwt.return "sigotoninStd.js" in
-  Lwt.pick [t0; t1] >>= fun routine ->
+    Lwt.return routine in
+  let t0 = add_routine "Easy AI" (`Worker "sigotoninEasy.js") in
+  let t1 = add_routine "Standard AI" (`Worker "sigotoninStd.js") in
+  let t2 =
+    add_routine "Remote AI"
+      (`Remote "https://www.ocf.berkeley.edu/~ykentaro/yomi/remoteToppa.cgi") in
+  Lwt.pick [t0; t1; t2] >>= fun routine ->
   body##.innerHTML := js "Loading images...";
   t >>= (fun () ->
-    body##.innerHTML := js "";
     let rec loop b n acc =
+      body##.innerHTML := js "";
       let s =
         Printf.sprintf "You have won %d point(s) after %d game(s).  \
                         You are the %s player in this round."
