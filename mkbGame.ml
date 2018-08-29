@@ -56,9 +56,10 @@ let handle_sarasi _ cs =
   0, List.filter (is_oni `Te) cs
 
 let deal_type = No_basanbon
-let bound = Some 200                  
+let bound = Some 200
+let remote_url = "https://www.ocf.berkeley.edu/~ykentaro/yomi/remoteMkb.cgi"
 
 module UCB1 = struct
-  let limit = 2000
-  let param = 200.
+  let limit = 10000
+  let param = 200. *. sqrt 2.
 end

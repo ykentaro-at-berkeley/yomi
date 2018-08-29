@@ -32,6 +32,7 @@ module Make (M : S) = struct
     cgi#out_channel#commit_work ()
 
   let () =
+    Random.self_init ();
     let config = { default_config with
                    default_exn_handler = false;
                    permitted_input_content_types = ["application/octet-stream"]; } in

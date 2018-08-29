@@ -80,32 +80,24 @@ module Make (G : Edsl.GAME) = struct
 
     let mes = Html.createDiv document
     let ds = Html.createDiv document
+
+    let message = function
+      | "" ->
+         mes##.innerHTML := js "&nbsp;"
+      | s ->
+         mes##.innerHTML := js s
+
     let init s body =
       Dom.appendChild body ds;
       Dom.appendChild body mes;
       ds##.innerHTML := js s;
-      mes##.innerHTML := js "";
+      message "";
       cards := [];
       div##.innerHTML := js "";
       div##.style##.width := js_sprintf "%dpx" (card_width * 12);
       div##.style##.height := js_sprintf "%dpx" (card_width * 8);
       div##.style##.position := js "relative";
       Dom.appendChild body div
-
-    (* let compare r r' = Pervasives.compare r.z r'.z *)
-
-    (* let draw () = *)
-    (*   let ctx = canvas##getContext Html._2d_ in *)
-    (*   let cards = List.sort compare !cards in *)
-    (*   ctx##clearRect 0.0 0.0 (float canvas##.width) (float canvas##.height); *)
-    (*   let f r = *)
-    (*     ctx##.fillStyle := js "white"; *)
-    (*     ctx##fillRect (float r.x) (float r.y) *)
-    (*                   (float card_width) (float card_height); *)
-    (*     ctx##drawImage_withSize r.image *)
-    (*                             (float r.x) (float r.y) *)
-    (*                             (float card_width) (float card_height) in *)
-    (*   List.iter f cards *)
 
     let get_repr (c : card) =
       try (c, List.assoc c !cards)
@@ -141,6 +133,10 @@ module Make (G : Edsl.GAME) = struct
       ctx##drawImage_withSize (List.assoc c bank)
                               0. 0.
                               card_width card_height;
+      (* canv##.style##.cssText :=
+       *   js "transition-property: left, top;\
+       *       transition-duration: 0.1s;\
+       *       transition-timing-function: linear"; *)
       canv##.style##.border := js card_border;
       canv
 
@@ -276,14 +272,26 @@ module Make (G : Edsl.GAME) = struct
     let align_tori (y : [`AI | `Human]) cs =
       align_tori' (y_of_polyvar y) (List.sort compare' cs)
 
-    let reveal_card pvar (c : card) =
-      ignore (make_repr c);
-      match place pvar c with
-      | None, (x, y) ->
-         set_coord c x y
-      | Some c', (x, y) ->
-         set_z c 1;
-         set_coord c (x + 20) (y + 20)
+    let y_yama = y_ba
+    let x_yama = ((Array.length ba)/2 + 1) * (card_width + gap)
+
+    let reveal_card bmt (c : card) =
+      let _, canv = make_repr c in
+      begin
+        match place bmt c with
+        | None, (x, y) ->
+           set_coord c x y
+        | Some c', (x, y) ->
+           set_z c 1;
+           set_coord c (x + 20) (y + 20);
+      end;
+      match bmt with
+      (* | `Mekuri ->
+       *    canv##.style##.transform := js "rotate(180deg)";
+       *    let f () =
+       *      canv##.style##.transform := js "" in
+       *    ignore (Html.window##setTimeout (Js.wrap_callback f) 0.2) *)
+      | _ -> ()
 
     let set_attention' canv b =
       if b then
@@ -293,9 +301,6 @@ module Make (G : Edsl.GAME) = struct
 
     let set_attention c b =
       let _, canv = get_repr c in set_attention' canv b
-
-    let message s =
-      mes##.innerHTML := js s
   end
 
   module Sound = struct
@@ -349,7 +354,7 @@ module Make (G : Edsl.GAME) = struct
     (fun g ms ->
       match g with
       | { phase = Play_phase } ->
-         let cs = List.map (fun (Play c) -> c) ms in
+         let cs = List.map (fun [@warning "-8"] (Play c)  -> c) ms in
          let ts =
            let f c =
              let (_, r) = Drawer.get_repr c in
@@ -357,11 +362,12 @@ module Make (G : Edsl.GAME) = struct
            List.map f cs in
          Lwt.pick ts
       | { phase = Awase1_phase _ } ->
-         (catch_raise @@ choose_card (List.map (fun (Awase1 c) -> c) ms))
+         (catch_raise @@ choose_card (List.map (fun [@warning "-8"] (Awase1 c) -> c) ms))
          >>= (fun c -> Lwt.return (Awase1 c))
       | { phase = Awase2_phase c0 } ->
-         (catch_raise @@ choose_card (List.map (fun (Awase2 (_, c)) -> c) ms))
-         >>= (fun c -> Lwt.return (Awase2 (c0, c))))
+         (catch_raise @@ choose_card (List.map (fun [@warning "-8"] (Awase2 (_, c)) -> c) ms))
+         >>= (fun c -> Lwt.return (Awase2 (c0, c)))
+      | _ -> failwith "human_choose_move")
 
   let human =
     { visible = true;
@@ -376,18 +382,10 @@ module Make (G : Edsl.GAME) = struct
       { visible;
         name = name;
         choose_move = fun g _ ->
-                      BinaryXHR.perform routine g
-                      (* Lwt_js.sleep 0.5 >>= fun () -> *)
-                      (* Lwt.return (M.good_move g) *)
-                      (* Drawer.message *)
-                      (* @@ Printf.sprintf "%s is thinking..." ai.name; *)
-                      (* worker##postMessage (Json.output g); *)
-                      (* let ev = Html.Event.make "message" in *)
-                      (* Events.make_event ev worker >>= *)
-                      (*   fun e -> *)
-                      (*   let move = Json.unsafe_input e##.data in *)
-                      (*   Drawer.message ""; *)
-                      (*   Lwt.return move *) } in
+         Drawer.message @@ Printf.sprintf "%s is thinking..." name;
+         BinaryXHR.perform routine g >>= fun m ->
+         Drawer.message "";
+         Lwt.return m } in
     ai
 
   let ai = make_ai "Computer" G.remote_url
@@ -420,34 +418,38 @@ module Make (G : Edsl.GAME) = struct
                  Drawer.unplace c';
                  loop_awase1 p g m
               | ms ->
-                 p.choose_move g ms >>= fun ((Awase1 c') as m) ->
+                 p.choose_move g ms >>= fun [@warning "-8"] ((Awase1 c') as m) ->
                  Drawer.unplace c';
                  loop_awase1 p g m
-            end)
+            end
+         | _ -> failwith "loop_play")
   and loop_awase1 p (g : awase1_t game) (m : awase1_t move) =
     match apply g m with
     | GExist ({ phase = Awase2_phase c; } as g) ->
        Drawer.align_tori (if p.visible then `Human else `AI )
                          (cards_of_tori (player_of_game g).tori);
-       (catch_raise @@ Lwt_js.sleep 0.3) >>= fun () ->
+       (catch_raise @@ Lwt_js.sleep 0.4) >>= fun () ->
        Drawer.reveal_card `Mekuri c;
        Sound.play ();
-       match moves g with
-       | [Awase2_nop c] ->
-          (catch_raise @@ Lwt_js.sleep 0.5) >>= fun () ->
-          loop_awase2 p g (Awase2_nop c)
-       | [(Awase2_basanbon (_, c', c'', c''')) as m] ->
-          (catch_raise @@ Lwt_js.sleep 0.5) >>= fun () ->
-          basanbon p (c', c'', c''');
-          loop_awase2 p g m
-       | [(Awase2 (_, c')) as m] ->
-          (catch_raise @@ Lwt_js.sleep 0.5) >>= fun () ->
-          Drawer.unplace c';
-         loop_awase2 p g m
-       |  ms ->
-          p.choose_move g ms >>= fun ((Awase2 (_, c')) as m) ->
-          Drawer.unplace c';
-          loop_awase2 p g m
+       begin
+         match moves g with
+         | [Awase2_nop c] ->
+            (catch_raise @@ Lwt_js.sleep 0.5) >>= fun () ->
+            loop_awase2 p g (Awase2_nop c)
+         | [(Awase2_basanbon (_, c', c'', c''')) as m] ->
+            (catch_raise @@ Lwt_js.sleep 0.5) >>= fun () ->
+            basanbon p (c', c'', c''');
+            loop_awase2 p g m
+         | [(Awase2 (_, c')) as m] ->
+            (catch_raise @@ Lwt_js.sleep 0.5) >>= fun () ->
+            Drawer.unplace c';
+            loop_awase2 p g m
+         |  ms ->
+             p.choose_move g ms >>= fun [@warning "-8"] ((Awase2 (_, c')) as m) ->
+             Drawer.unplace c';
+             loop_awase2 p g m
+       end
+    | _ -> failwith "loop_awase1"
   and loop_awase2 p (g : awase2_t game) (m : awase2_t move) =
     let body =
       Js.Opt.get (document##getElementById (js "yomi"))
@@ -466,7 +468,7 @@ module Make (G : Edsl.GAME) = struct
     end;
     match g with
     | GExist ({ phase = Thru_phase } as g) ->
-       let Some (ui, uii) = payoff g in
+       let [@warning "-8"] Some (ui, uii) = payoff g in
        let b, c = dialog () in
        Dom.appendChild body b;
        append_text c "The game ended.\n";
@@ -476,7 +478,7 @@ module Make (G : Edsl.GAME) = struct
        Dom.removeChild body b;
        Lwt.return (ui, uii)
     | GExist ({ phase = Winning_phase } as g) ->
-       let Some (ui, uii)  = payoff g in
+       let [@warning "-8"] Some (ui, uii)  = payoff g in
        let b, c = dialog () in
        Dom.appendChild body b;
        append_text c (Printf.sprintf
@@ -491,6 +493,7 @@ module Make (G : Edsl.GAME) = struct
        Lwt.return (ui, uii)
     | GExist ({ phase = Play_phase } as g) ->
        loop_play (if p.visible then ai else human) g
+    | _ -> failwith "loop_awase2"
 
   let start () =
     Random.self_init ();
