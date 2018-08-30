@@ -34,7 +34,7 @@ module Make (G : Edsl.GAME) = struct
   let card_width = 62
   let card_height = 98
 
-  let dialog f =
+  let dialog () =
     let b = Html.createDiv document in
     b##.style##.cssText :=
       js "position: fixed;\
@@ -121,7 +121,31 @@ module Make (G : Edsl.GAME) = struct
 
     let card_border = "2px outset black"
 
-    let make_repr_internal c =
+    let rec append_cards e cs =
+      let f c =
+        let canv = make_repr_internal c in
+        Dom.appendChild e canv in
+      List.iter f cs
+
+    and display_play_guide c =
+      let u, _, ys = play_guide c in
+      let body =
+        Js.Opt.get (document##getElementById (js "yomi"))
+          (fun () -> assert false) in
+      let b, cont = dialog () in
+      Dom.appendChild body b;
+      append_text cont @@ Printf.sprintf "Utility of the card: %d" u;
+      let f (s, u, n, cs) =
+        append_text cont
+        @@ Printf.sprintf
+             "Yaku %s of utility %d for collecting %d of the following:" s u n;
+        append_cards cont cs in
+      List.iter f ys;
+      Events.click b >>= fun _ ->
+      Dom.removeChild body b;
+      Lwt.return ()
+
+    and make_repr_internal c =
       let canv = Html.createCanvas document in
       canv##.width := card_width;
       canv##.height := card_height;
@@ -138,6 +162,10 @@ module Make (G : Edsl.GAME) = struct
        *       transition-duration: 0.1s;\
        *       transition-timing-function: linear"; *)
       canv##.style##.border := js card_border;
+      let handler e =
+        ignore (display_play_guide c);
+        Js._false in
+      (Js.Unsafe.coerce canv)##.oncontextmenu := Html.handler handler;
       canv
 
     let make_repr (c : card) =
@@ -232,12 +260,6 @@ module Make (G : Edsl.GAME) = struct
     let set_z c z =
       let _, canv = get_repr c in set_z' canv z
 
-    let append_cards e cs =
-      let f c =
-        let canv = make_repr_internal c in
-        Dom.appendChild e canv in
-      List.iter f cs
-
     let show_tori_dialog (cs : card list ) =
       let body =
         Js.Opt.get (document##getElementById (js "yomi"))
@@ -276,7 +298,7 @@ module Make (G : Edsl.GAME) = struct
     let x_yama = ((Array.length ba)/2 + 1) * (card_width + gap)
 
     let reveal_card bmt (c : card) =
-      let _, canv = make_repr c in
+      let _, _ = make_repr c in
       begin
         match place bmt c with
         | None, (x, y) ->

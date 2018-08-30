@@ -455,7 +455,16 @@ module Make (G : GAME) = struct
   (*   let data = { pi = pi; pii = pii; ba = ba; yama = yama; current = PI } in *)
   (*   { phase = Play_phase; data = data } *)
 
+  (* Used by the UI *)
+  let cards_of_yaku (_, Count (_, _, g)) = List.filter g hana_karuta
               
+  let play_guide (c : card) =
+    let f ((s, Count (_, _, g)) as y) = if g c then Some y else None in
+    let ys = List.filter_map f G.yaku in
+    let f ((s, Count (u, n, g)) as y) =
+      let cs = cards_of_yaku y in
+      (s, u, n, cs) in
+    (G.util_of_card c, [], List.map f ys)
 
   module MCUCB1 = struct
     let param = G.UCB1.param
