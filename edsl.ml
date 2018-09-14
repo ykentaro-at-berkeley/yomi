@@ -24,7 +24,10 @@ type payoff_type = Difference | Absolute
 type oni_type = Leave_rest | Take_rest
 type player_id = PI | PII [@@deriving typerep]
 type deal_type = No_basi | No_basanbon
-type megati = Megati_none | Megati_thru of int
+type megati =
+  | Megati_none
+  | Megati_thru of int
+  | Megati_fun of ((util * util) -> (util * util))
 
 module type GAME = sig
   val util_of_card : card -> util
@@ -249,6 +252,7 @@ module Make (G : GAME) = struct
     let u, u' = (util_of_tori ~thru:true tori, util_of_tori ~thru:true tori') in
     let u, u' =
       match G.megati with
+      | Megati_fun f -> f (u, u')
       | Megati_thru n ->
          if u > u' then (n, 0)
          else if u < u' then (0, n)

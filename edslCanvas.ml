@@ -34,6 +34,13 @@ module Make (G : Edsl.GAME) = struct
   let card_width = 62
   let card_height = 98
 
+  let make_keyboard_accessible elt =
+    let handler e =
+      if e##.keyCode = 13 then begin elt##click; Js._false end
+      else Js._true in
+    elt##.onkeydown := Html.handler handler;
+    (Js.Unsafe.coerce elt)##.tabIndex := 0
+
   let dialog () =
     let b = Html.createDiv document in
     b##.style##.cssText :=
@@ -54,6 +61,7 @@ module Make (G : Edsl.GAME) = struct
           padding: 20px;\
           border: 1px solid #888;\
           width: 80%";
+    make_keyboard_accessible c;
     (b, c)
 
   module Drawer = struct
@@ -134,6 +142,7 @@ module Make (G : Edsl.GAME) = struct
           (fun () -> assert false) in
       let b, cont = dialog () in
       Dom.appendChild body b;
+      cont##focus;
       append_text cont @@ Printf.sprintf "Utility of the card: %d" u;
       let f (s, u, n, cs) =
         append_text cont
@@ -245,7 +254,11 @@ module Make (G : Edsl.GAME) = struct
       let rs = List.map (fun c -> make_repr c) cs in
       let f x (_, c) = set_coord' c x (y_of_polyvar y); x + card_width + gap in
       ignore (List.fold_left f 0 rs);
-      List.iter (fun (_, c) -> set_visibility' c true) rs
+      List.iter (fun (_, c) -> set_visibility' c true) rs;
+      match y with
+      | `Human ->
+         List.iter (fun (_, c) -> make_keyboard_accessible c) rs;
+      | _ -> ()
 
     let compare' c c' =
       let u, u' = G.util_of_card c, G.util_of_card c' in
@@ -266,6 +279,7 @@ module Make (G : Edsl.GAME) = struct
                    (fun () -> assert false) in
       let b, cont = dialog () in
       Dom.appendChild body b;
+      cont##focus;
       append_cards cont cs;
       (catch_raise @@ Events.click b) >>= (fun _ ->
         Dom.removeChild body b;
@@ -488,14 +502,22 @@ module Make (G : Edsl.GAME) = struct
          Drawer.align_tori (if p.visible then `Human else `AI)
                            (cards_of_tori (player_of_game' (swap' data)).tori)
     end;
+    let append_yaku c player =
+       let f (s, u) =
+         append_text c (Printf.sprintf "%s (%d)\n" s u) in
+       List.iter f (yaku_results_of_tori player.tori) in
     match g with
     | GExist ({ phase = Thru_phase } as g) ->
        let [@warning "-8"] Some (ui, uii) = payoff g in
        let b, c = dialog () in
        Dom.appendChild body b;
-       append_text c "The game ended.\n";
+       c##focus;
+       (* append_text c "The game ended.\n"; *)
        append_text c (Printf.sprintf "First player's payoff: %d" ui);
+       append_yaku c g.data.pi;
+       append_text c "-- ";
        append_text c (Printf.sprintf "Second player's payoff: %d" uii);
+       append_yaku c g.data.pii;
        Events.click b >>= fun _ ->
        Dom.removeChild body b;
        Lwt.return (ui, uii)
@@ -503,13 +525,12 @@ module Make (G : Edsl.GAME) = struct
        let [@warning "-8"] Some (ui, uii)  = payoff g in
        let b, c = dialog () in
        Dom.appendChild body b;
+       c##focus;
        append_text c (Printf.sprintf
                         "%s won with payoff %d:\n" p.name
                         (util_of_yaku_results
                            (yaku_results_of_tori (player_of_game g).tori)));
-       let f (s, u) =
-         append_text c (Printf.sprintf "%s (%d)\n" s u) in
-       List.iter f (yaku_results_of_tori (player_of_game g).tori);
+       append_yaku c (player_of_game g);
        Events.click b >>= fun _ ->
        Dom.removeChild body b;
        Lwt.return (ui, uii)

@@ -47,6 +47,8 @@ let deal_type = No_basi
 let bound = None
 let megati = Megati_none
 
+let remote_url = "https://www.ocf.berkeley.edu/~ykentaro/yomi/remoteKaga.cgi"
+
 module UCB1 = struct
   let limit = 3000
   let param = 610.0
