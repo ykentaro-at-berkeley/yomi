@@ -64,6 +64,25 @@ module List = struct
     in recurse [] l
   let keep_some l = filter_map (fun x->x) l
 
+  let set_at_idx i x l0 =
+    let rec aux l acc i = match l with
+      | [] -> l0
+      | _::l' when i=0 -> List.rev_append acc (x::l')
+      | y::l' ->
+         aux l' (y::acc) (i-1)
+    in
+    let i = if i<0 then length l0 + i else i in
+    aux l0 [] i
+
+  let init len f =
+    let rec init_rec acc i f =
+      if i=0 then f i :: acc
+      else init_rec (f i :: acc) (i-1) f
+    in
+    if len<0 then invalid_arg "init"
+    else if len=0 then []
+    else init_rec [] (len-1) f
+                  
   (* my work *)
   let diff ?(eq=(=)) xs ys =
     let f xs y = remove ~eq:eq ~x:y xs in
