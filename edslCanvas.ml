@@ -413,13 +413,15 @@ module Make (G : Edsl.GAME) = struct
   let make_ai ?(visible = false) name routine =
     (* let worker : (Js.js_string Js.t, Js.js_string Js.t) Worker.worker Js.t *)
     (*   = Worker.create routine in *)
-    let module M = MCUCB1 in
     let rec ai = 
       { visible;
         name = name;
         choose_move = fun g _ ->
          Drawer.message @@ Printf.sprintf "%s is thinking..." name;
-         BinaryXHR.perform routine g >>= fun m ->
+         Lwt_js.sleep 0.3 >>= fun () ->
+         let module M = MCUCB1 in
+         let m = M.good_move g in
+         (* BinaryXHR.perform routine g >>= fun m -> *)
          Drawer.message "";
          Lwt.return m } in
     ai
@@ -522,7 +524,7 @@ module Make (G : Edsl.GAME) = struct
        Dom.removeChild body b;
        Lwt.return (ui, uii)
     | GExist ({ phase = Winning_phase } as g) ->
-       let [@warning "-8"] Some (ui, uii)  = payoff g in
+       let [@warning "-8"]  Some (ui, uii)  = payoff g in
        let b, c = dialog () in
        Dom.appendChild body b;
        c##focus;
@@ -563,9 +565,17 @@ module Make (G : Edsl.GAME) = struct
       body##.innerHTML := js "";
       let rec loop b n acc =
         let s =
-          Printf.sprintf "You have won %d point(s) after %d game(s).  \
-                          You are the %s player in this round."
-                         acc n (if b then "second" else "first") in
+          let s' =
+            match acc with
+            | `Difference acc ->
+               Printf.sprintf "You have won %d point(s) after %d hand(s)."
+                 acc n
+            | `Absolute (human, ai)->
+               Printf.sprintf "You won %d; Computer won %d after %d hand(s)."
+                 human ai n in
+          s' ^
+            Printf.sprintf " You are the %s player in this round."
+              (if b then "second" else "first") in
         Drawer.init s body;
         let g = init () in
         (* Drawer.make_place_human (if b then g.data.pii else g.data.pi).hand; *)
@@ -577,7 +587,20 @@ module Make (G : Edsl.GAME) = struct
           else Drawer.make_place `AI g.data.pii.sarasi
         end;
         loop_play pi g >>= fun (ui, uii) ->
-        loop (not b) (n + 1) (acc + if b then uii - ui else ui - uii) in
-      loop false 0 0)
+        let acc =
+          match acc with
+          | `Difference acc ->
+              `Difference (acc + if b then uii - ui else ui - uii)
+          | `Absolute (human, ai) ->
+             if b then
+               `Absolute (human + uii, ai + ui)
+             else
+               `Absolute (human + ui, ai + uii) in
+        loop (not b) (n + 1) acc in
+      match G.payoff_type with
+      | Difference ->
+         loop false 0 (`Difference 0)
+      | Absolute ->
+         loop false 0 (`Absolute (0, 0) (* human, ai*)))
 end
                                 
