@@ -506,16 +506,10 @@ module Make (G : EdslN.GAME) = struct
           (fun () -> assert false) in
       let p = g.data.current in
       let g = apply g m in
-      begin
-        let k p''' =
-          Drawer.align_tori (row_of_player_id p)
-            (cards_of_tori p'''.tori) in
-        match g with
-        |  { phase = Winning_phase; data } -> k (player_of_game' data)
-        |  { phase = Thru_phase; data } -> k (player_of_game' data)
-        |  { data = data } -> (* player has already switched *)
-           k (player_of_game' ~player:p data)
-      end;
+      for i = 0 to G.n_players - 1 do
+        Drawer.align_tori (row_of_player_id i)
+          (cards_of_tori (player_of_game ~player:i g).tori)
+      done;
       let append_yaku c player =
         let f (s, u) =
           append_text c (Printf.sprintf "%s (%d)\n" s u) in
