@@ -215,16 +215,13 @@ module Make (G : GAME) = struct
   let payoff_winning : player_id -> game -> util
     = fun p g ->
     let {tori} = player_of_game ~player:p g in
-    match yaku_results_of_tori tori with
-    | [] ->
-       let rec loop i acc =
-         if i >= n_players then -acc
-         else if i = p then loop (i+1) acc
-         else
-           let x = util_of_tori_sets (player_of_game ~player:i g).tori in
-           loop (i + 1) (acc + x) in
-       loop 0 0
-    | _ -> (G.n_players - 1) * util_of_tori_sets tori
+    let rec loop i acc =
+      if i >= n_players then acc
+      else if i = p then loop (i+1) acc
+      else
+        let x = util_of_tori_sets (player_of_game ~player:i g).tori in
+        loop (i + 1) (acc + x) in
+    (G.n_players - 1) * util_of_tori_sets tori - loop 0 0
 
   let payoff_thru : player_id -> game -> util
     = fun p ({ data } as g) ->
@@ -317,9 +314,46 @@ module Make (G : GAME) = struct
     else { g with current = current + 1 }
   let pass g = { g with data = pass' g.data }
 
+  let hana_karuta : card list =
+    List.flatten
+    @@ List.map (fun r ->
+           List.map (fun m -> (Obj.magic m, r)) [0;1;2;3;4;5;6;7;8;9;10;11])
+                [One;Two;Three;Four]
+
+  let handle_take_rest =
+    match G.oni_type with
+    | Leave_rest -> fun x -> x
+    | Take_rest ->
+       let oni =
+         lazy begin
+             match List.filter (fun c -> G.is_oni `Te c) (* FIXME *) hana_karuta with
+             | [c] -> c
+             | _ -> failwith "handle_take_rest: unsupportedly many oni"
+           end in
+       fun ({ phase = Thru_phase; data } as g) ->
+       let k0 p' c g =
+         let p { tori } = List.exists p' tori.data in
+         let player = List.find p g.data.players in
+         let players = 
+           List.substq player { player with tori = cons c player.tori } g.data.players in
+         { g with data = { g.data with players } } in
+       let k c g = (* c is one of the three of the month of the oni *)
+         let p' ((m, _) as c) =
+           let oni = Lazy.force oni in
+           m == fst oni && c <> oni in
+         k0 p' c g in
+       let k' c g = (* c is one of the three of the month that the oni ate *)
+         k0 (fun c -> c = Lazy.force oni) c g in
+       match data.ba, oni with
+       | [], _ -> g
+       | [c; c'], lazy (m, _) when m == fst c -> k c (k' c' g)
+       | [c; c'], lazy (m, _) when m == fst c' -> k c' (k' c g)
+       | _ -> failwith "handle_take_rest: unsupported situation"
+       
+
   let check_thru ({ phase = Play_phase; data = data } as g) =
     if List.for_all (fun p -> p.hand = []) data.players then
-      { phase = Thru_phase; data }
+      handle_take_rest { phase = Thru_phase; data }
     else pass g
 
   let apply_awase2 { phase = Awase2_phase c; data = data } m =
@@ -368,12 +402,6 @@ module Make (G : GAME) = struct
     | { phase = Thru_phase } -> failwith "apply: applied to a draw game"
 
   let cards_of_tori ({ data } : tori) = data
-
-  let hana_karuta : card list =
-    List.flatten
-    @@ List.map (fun r ->
-           List.map (fun m -> (Obj.magic m, r)) [0;1;2;3;4;5;6;7;8;9;10;11])
-                [One;Two;Three;Four]
 
   let has k (hand : card list) =
     let rec loop m =
@@ -468,7 +496,9 @@ module Make (G : GAME) = struct
       (* end; *)
       let  g = apply g m in
       match payoff p g with
-      | Some po -> float po
+      | Some po ->
+         (* assert (let Some x, Some y, Some z = payoff 0 g, payoff 1 g, payoff 2 g in x + y + z = 0); *)
+         float po
       | None ->
          let ms = moves g in
          simple_playout p g (Random.randomth_list ms)
