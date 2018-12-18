@@ -478,27 +478,27 @@ let init () =
 
     
 
+
 module MCUCB1 (P : sig val param : float val limit : int end) = struct
   let param = P.param
   let limit = P.limit
     
+  type stat = { mutable sum_payoff : float;  mutable n_trials : int }
+
   let rec simple_playout : type a. player_id -> a game -> a move -> float =
     fun p g m ->
-    (* begin *)
-    (*   match m with *)
-    (*   | Play (m, r) -> *)
-    (*      Printf.printf "(%d, %d)\n" m (Obj.magic r) *)
-    (*   | _ -> () *)
-    (* end; *)
     let GExist g = apply g m in
     match payoff g with
     | Some po ->
-         if g.data.current == p then po else ~-.po
+       if g.data.current == p then po else ~-.po
     | None ->
        let ms = moves g in
-       simple_playout p g (Random.randomth_list ms)
-
-  type stat = { mutable sum_payoff : float;  mutable n_trials : int }
+       let f g =
+         simple_playout p g No_koi in
+       match g with
+       | { phase = Koi_phase } -> f g
+       | _ ->
+          simple_playout p g (Random.randomth_list ms) 
 
   let add_one_playout :
   type a. a game -> a move list -> stat array -> unit =
