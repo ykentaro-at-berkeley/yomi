@@ -310,8 +310,8 @@ let string_of_card c' =
                  (path_of_card c')
 
 let string_of_move : type a. a move -> string = function
-  | Koi -> "Declare Koi"
-  | No_koi -> "Do not declare Koi"
+  | Koi -> "こいこいよ!"
+  | No_koi -> "よろしい"
   | Awase1 c -> Names.string_of_card c
   | Awase2 (_, c) -> Names.string_of_card c
   | Play c -> Names.string_of_card c
