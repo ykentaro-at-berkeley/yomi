@@ -94,6 +94,11 @@ module List = struct
       | x::xs ->
          if List.mem x ys then loop xs else false in
     loop xs
+
+  let rec substq x y = function
+    | [] -> raise Not_found
+    | x' :: xs when x == x' -> y :: xs
+    | x' :: xs -> x' :: (substq x y xs)
 end
 module Random = struct
   include Random
