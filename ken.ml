@@ -53,9 +53,9 @@ let start () =
   body##.innerHTML := js "Loading images...";
   let t = catch_raise @@ Drawer.wait_for_bank () in
   t >>= (fun () ->
-    body##.innerHTML := js "";
     let human, ai = make relay_CK relay_KC in
     let rec loop b n acc =
+      body##.innerHTML := js "";
       let s =
         Printf.sprintf "You have won %d point(s) after %d game(s).  \
                         You are the %s player in this round."
