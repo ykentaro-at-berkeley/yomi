@@ -11,7 +11,11 @@ type month =
   | Momizi | Yanagi| Kiri [@@deriving typerep]
 type rank = One | Two | Three | Four [@@deriving typerep]
 type card = month * rank [@@deriving typerep]
-type yaku' = Count of util * int * (card -> bool)
+type yaku_pred_flag = [`Thru] [@@deriving typerep]
+type yaku_pred =  yaku_pred_flag list -> bool
+type yaku' =
+  | Count of util * int * (card -> bool)
+  | With_pred of yaku_pred * yaku'
 type yaku = string * yaku'
 type yaku_result = string * util [@@deriving typerep]
 type rule = Till_end | Abort_when_yaku
@@ -44,7 +48,8 @@ end
 module Make (G : GAME) = struct
   let n_players = G.n_players
 
-  type tori = { data : card list; mutable memo : yaku_result list option }
+  type tori = { data : card list;
+                (* mutable memo : (yaku_pred_flag * yaku_result) list *) }
         [@@deriving typerep]
 
   (* Do not want to use polymorphic eq function *)
@@ -56,36 +61,40 @@ module Make (G : GAME) = struct
     let f s y = s + util_of_yaku_result y in
     List.fold_left f 0 ys
 
-  let yaku_results_of_tori' y cs =
-    match y with
-    | (s, Count (u, n, f)) ->
-       let rec loop n' cs =
-         if n' >= n then Some (s, u)
-         else
-           match cs with
-           | [] -> None
-           | c :: cs ->
-              if f c then loop (n' + 1) cs else loop n' cs in
-       loop 0 cs
+  let yaku_results_of_tori' fl (s, y) cs =
+    let rec loop y =
+      match y with
+      | With_pred (p, y)->
+         if p fl then loop y else None
+      | Count (u, n, f) ->
+         let rec loop n' cs =
+           if n' >= n then Some (s, u)
+           else
+             match cs with
+             | [] -> None
+             | c :: cs ->
+                if f c then loop (n' + 1) cs else loop n' cs in
+         loop 0 cs in
+    loop y
 
-  let yaku_results_of_tori ({ data = cs; memo } as t) =
-    match memo with
-    | Some ys -> ys
-    | _ ->
+  let yaku_results_of_tori ?(fl = []) ({ data = cs(* ; memo *) } as t) =
+    (* try List.assoc memo with
+     * | Some ys -> ys
+     * | _ -> *)
        let f acc y =
-         match yaku_results_of_tori' y cs with
+         match yaku_results_of_tori' fl y cs with
          | Some x -> x :: acc
          | None -> acc in
        let ys = List.fold_left f [] G.yaku in
-       t.memo <- Some ys;
+       (* t.memo <- Some ys; *)
        ys
 
   let util_of_tori_trivial t = 
     let f s c = s + G.util_of_card c in
     List.fold_left f 0 t.data
 
-  let util_of_tori_sets t =
-    let ys = yaku_results_of_tori t in
+  let util_of_tori_sets ?(fl = []) t =
+    let ys = yaku_results_of_tori ~fl:fl t in
     let f s y = s + util_of_yaku_result y in
     List.fold_left f 0 ys
     
@@ -109,7 +118,7 @@ module Make (G : GAME) = struct
    *         let f s y = s + util_of_yaku_result y in
    *         List.fold_left f 0 ys  *)
 
-  let cons (c : card) (t : tori) = { data = c :: t.data; memo = None }
+  let cons (c : card) (t : tori) = { data = c :: t.data(* ; memo = None  *)}
 
   type player = { hand : card list; tori : tori; sarasi : card list }
         [@@deriving typerep]
@@ -214,6 +223,10 @@ module Make (G : GAME) = struct
 
   let payoff_winning : player_id -> game -> util
     = fun p g ->
+    let fl =
+      match g with
+      | { phase = Thru_phase } -> [`Thru]
+      | _ -> [] in
     let {tori} = player_of_game ~player:p g in
     let rec loop i acc =
       if i >= n_players then acc
@@ -221,7 +234,7 @@ module Make (G : GAME) = struct
       else
         let x = util_of_tori_sets (player_of_game ~player:i g).tori in
         loop (i + 1) (acc + x) in
-    (G.n_players - 1) * util_of_tori_sets tori - loop 0 0
+    (G.n_players - 1) * util_of_tori_sets ~fl:fl tori - loop 0 0
 
   let payoff_thru : player_id -> game -> util
     = fun p ({ data } as g) ->
@@ -465,21 +478,27 @@ module Make (G : GAME) = struct
         else
           let hand, cs = take_drop_wo_si G.n_te cs in
           loop (i + 1)
-            ({ hand; tori = { data = []; memo = None }; sarasi = [] } :: players)
+            ({ hand; tori = { data = []; (* memo = None *) }; sarasi = [] } :: players)
             cs in
       loop 0 [] cs in
     { phase = Play_phase; data = { current = 0; ba; yama = cs; players }}
 
 
   (* Used by the UI *)
-  let cards_of_yaku (_, Count (_, _, g)) = List.filter g hana_karuta
+  let rec cards_of_yaku = function
+    | (_, Count (_, _, g)) -> List.filter g hana_karuta
+    | (s, With_pred (_, y)) -> cards_of_yaku (s, y)
               
   let play_guide (c : card) =
-    let f ((s, Count (_, _, g)) as y) = if g c then Some y else None in
+    let rec f = function
+      | (s, With_pred (_, y)) -> f (s, y)
+      | ((_, Count (_, _, g)) as y) ->  if g c then Some y else None in
     let ys = List.filter_map f G.yaku in
-    let f ((s, Count (u, n, g)) as y) =
-      let cs = cards_of_yaku y in
-      (s, u, n, cs) in
+    let rec f = function
+      | (s, With_pred (_, y)) -> f (s, y)
+      | ((s, Count (u, n, g)) as y) ->
+         let cs = cards_of_yaku y in
+         (s, u, n, cs) in
     (G.util_of_card c, [], List.map f ys)
 
   module MCUCB1 = struct
