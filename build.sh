@@ -3,8 +3,8 @@
 # js_of_ocaml window.byte
 # js_of_ocaml sigotonin.byte
 
-#ocamlbuild -cflags -annot,-g -lflag -g -use-ocamlfind -pkgs lwt,js_of_ocaml,js_of_ocaml-lwt,js_of_ocaml.ppx sigotoninEasy.byte sigotoninStd.byte canvas.byte
-ocamlbuild -cflags '-annot,-g,-w @10' -lflag -g -use-ocamlfind -pkgs base,lwt,js_of_ocaml,js_of_ocaml-lwt,js_of_ocaml.ppx,ppx_deriving,ppx_typerep_conv,typerep ayameKatugi.byte
+ocamlbuild -cflags -annot,-g -lflag -g -use-ocamlfind -pkgs lwt,js_of_ocaml,js_of_ocaml-lwt,js_of_ocaml.ppx sigotoninEasy.byte sigotoninStd.byte canvas.byte
+#ocamlbuild -cflags '-annot,-g,-w @10' -lflag -g -use-ocamlfind -pkgs base,lwt,js_of_ocaml,js_of_ocaml-lwt,js_of_ocaml.ppx,ppx_deriving,ppx_typerep_conv,typerep ayameKatugi.byte
 #ocamlbuild -cflags -annot,-g -lflag -g -use-ocamlfind -pkgs netcgi2,unmagic,ppx_deriving,ppx_typerep_conv,typerep remoteKekoro.native
 errno=$?
 
