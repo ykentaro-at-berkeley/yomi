@@ -14,7 +14,9 @@ type month =
   | Momizi | Yanagi| Kiri [@@deriving typerep]
 type rank = One | Two | Three | Four [@@deriving typerep]
 type card = month * rank [@@deriving typerep]
-type yaku' = Count of util * int * (card -> bool)
+type yaku' =
+  | Count of util * int * (card -> bool)
+  | Count_exact of util * int * (card -> bool)
 type yaku = string * yaku'
 type yaku_result = string * util [@@deriving typerep]
 type yaku_type = Simple | Deiri
@@ -63,6 +65,10 @@ module Make (G : GAME) = struct
 
   let yaku_results_of_tori' y cs =
     match y with
+    | (s, Count_exact (u, n, f)) ->
+       let g acc c = if f c then acc + 1 else acc in
+       if (List.fold_left g 0 cs) == n then Some (s, u)
+       else None
     | (s, Count (u, n, f)) ->
        let rec loop n' cs =
          if n' >= n then Some (s, u)
@@ -284,9 +290,9 @@ module Make (G : GAME) = struct
     let f xs y = remove_card y xs in
     List.fold_left f xs ys
                    
-  let apply_awase1_ { phase = Awase1_phase c; data = data } m =
+  let apply_awase1 { phase = Awase1_phase c; data = data } m =
     match data.yama with
-    | [] -> failwith "apply : we should never run out of cards"
+    | [] -> GExist { phase = Thru_phase; data = data } (* for 10 mai *)
     | top::yama ->  
        let data = { data with yama = yama } in
        let p = player_of_game' data in
@@ -297,14 +303,14 @@ module Make (G : GAME) = struct
        begin
          match m with
          | Awase1_nop ->
-            { phase = Awase2_phase top;
+            GExist { phase = Awase2_phase top;
               data = { data with ba = c::data.ba }}
          | Awase1 c' ->
             let tori = cons c (cons c' p.tori) in
-            { phase = Awase2_phase top; data = help tori [c'] }
+            GExist { phase = Awase2_phase top; data = help tori [c'] }
          | Awase1_basanbon (c', c'', c''') ->
             let tori = cons c (cons c' (cons c'' (cons c''' p.tori))) in
-            { phase = Awase2_phase top; data = help tori [c'; c''; c''']}
+            GExist { phase = Awase2_phase top; data = help tori [c'; c''; c''']}
        end
 
   let check_thru ({ phase = Play_phase; data = data } as g) =
@@ -350,7 +356,7 @@ module Make (G : GAME) = struct
     = fun g m ->
     (* assert (List.mem m (moves g)); *)
     match g with
-    | { phase = Awase1_phase _ } as g -> GExist (apply_awase1_ g m)
+    | { phase = Awase1_phase _ } as g -> apply_awase1 g m
     | { phase = Awase2_phase _} as g -> apply_awase2 g m
     | { phase = Play_phase } as g -> GExist (apply_play_ g m)
     | { phase = Winning_phase } ->
@@ -460,15 +466,20 @@ module Make (G : GAME) = struct
   (*   { phase = Play_phase; data = data } *)
 
   (* Used by the UI *)
+  let upgrade f = function
+    | (s, Count_exact (x, y, z)) -> f (s, Count (x, y, z))
+
   let cards_of_yaku (_, Count (_, _, g)) = List.filter g hana_karuta
+  let cards_of_yaku = upgrade cards_of_yaku
               
   let play_guide (c : card) =
     let f ((s, Count (_, _, g)) as y) = if g c then Some y else None in
+    let f = upgrade f in
     let ys = List.filter_map f G.yaku in
     let f ((s, Count (u, n, g)) as y) =
       let cs = cards_of_yaku y in
       (s, u, n, cs) in
-    (G.util_of_card c, [], List.map f ys)
+    (G.util_of_card c, [], List.map (upgrade f) ys)
 
   module MCUCB1 = struct
     let param = G.UCB1.param

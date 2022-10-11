@@ -1,4 +1,6 @@
 open Edsl
+open Js_of_ocaml
+open Js_of_ocaml_lwt
 
 module Make (G : Edsl.GAME) = struct
   module M = Edsl.Make(G)
