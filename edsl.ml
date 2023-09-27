@@ -468,6 +468,7 @@ module Make (G : GAME) = struct
   (* Used by the UI *)
   let upgrade f = function
     | (s, Count_exact (x, y, z)) -> f (s, Count (x, y, z))
+    | x -> f x
 
   let cards_of_yaku (_, Count (_, _, g)) = List.filter g hana_karuta
   let cards_of_yaku = upgrade cards_of_yaku
