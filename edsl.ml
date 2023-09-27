@@ -4,8 +4,10 @@
 open MyStd
 open Typerep_lib.Std
 
+(* Overloading the @ operator to reverse append two lists. *)
 let (@) = List.rev_append
 
+(* Defining various types used in the game. *)
 type util = int [@@deriving typerep]
 type month =
   | Matu   | Ume   | Sakura
@@ -31,6 +33,7 @@ type megati =
   | Megati_thru of int
   | Megati_fun of ((util * util) -> (util * util))
 
+(* Defining the GAME module type which contains various game related values and types. *)
 module type GAME = sig
   val util_of_card : card -> util
   val yaku : yaku list
@@ -49,6 +52,8 @@ module type GAME = sig
   val remote_url : string
   module UCB1 : sig val limit : int val param : float end
 end
+
+(* Defining the Make functor which takes a GAME module and produces a module with game logic. *)
 module Make (G : GAME) = struct
 
   type tori = { data : card list; mutable memo : yaku_result list option }
