@@ -62,5 +62,5 @@ let move = TestGame.MCUCB1.good_move game
 Where game is the current game state. The good_move function will return the best move for the AI player based on Monte Carlo Tree Search.
 
 ### Testing
-To ensure the correctness of the module, comprehensive tests are provided. Run the tests to verify the functionality of the game logic, move application, scoring, and other aspects of the module.
+To ensure the correctness of the module, tests are provided. Run the tests to observe the efficacy of the Monte Carlo Tree Search.
 
