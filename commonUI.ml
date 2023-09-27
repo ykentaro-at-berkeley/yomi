@@ -1,3 +1,5 @@
+open Js_of_ocaml
+open Js_of_ocaml_lwt
 open MyStd
 open Toppa
 open Names
@@ -149,6 +151,7 @@ module Drawer = struct
     ctx##drawImage_withSize (List.assoc c bank)
                             0. 0.
                             card_width card_height;
+    canv##.style##.cssText := js "transition: top 0.5s, left 0.5s";
     canv##.style##.border := js card_border;
     canv
 
@@ -250,8 +253,7 @@ module Drawer = struct
       Lwt.return ())
 
   let align_tori y (cs : card' list) =
-    let inner =
-      Js.Optdef.get Html.window##.innerWidth (fun () -> assert false) in
+    let inner = Html.window##.innerWidth in
     let width = inner - x_tori - 10 in (* To cope with fp errors *)
     let dx = (float width) /. (float @@ List.length cs) in
     let dx = min dx (float (card_width + gap)) in

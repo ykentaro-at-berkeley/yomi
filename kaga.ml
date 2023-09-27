@@ -1,4 +1,5 @@
 open EdslCanvas
+open Js_of_ocaml
 
 module M = EdslCanvas.Make (KagaGame)
 

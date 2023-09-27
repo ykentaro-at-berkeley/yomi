@@ -24,6 +24,6 @@ let deal_type = No_basi
 let megati = Megati_without_origin 1
 let remote_url = ""
 module UCB1 = struct
-  let limit = 1000
+  let limit = 3000
   let param = sqrt 2.
 end

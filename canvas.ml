@@ -1,3 +1,5 @@
+open Js_of_ocaml
+open Js_of_ocaml_lwt
 open CommonUI
 open Toppa
 

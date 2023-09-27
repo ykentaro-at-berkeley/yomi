@@ -1,14 +1,16 @@
 (* c872be81-c6bc-5fa9-bb33-4e9c5c9129e2 *)
-
-open Js_of_ocaml
+(* This module is responsible for handling the communication and game logic for a remote game session. *)
 open CommonUI
 open Toppa
 
-let relay_CK = "https://demo.httprelay.io/link/CK-c872be81-c6bc-5fa9-bb33-4e9c5c9129e2"
-let relay_KC = "https://demo.httprelay.io/link/KC-c872be81-c6bc-5fa9-bb33-4e9c5c9129e2"
+(* Constants for relay URLs *)
+let relay_CK = "https://httprelay.io/link/CK-c872be81-c6bc-5fa9-bb33-4e9c5c9129e2"
+let relay_KC = "https://httprelay.io/link/KC-c872be81-c6bc-5fa9-bb33-4e9c5c9129e2"
 
+(* Type definition for messages, which can be either a Move or a Game *)
 type 'a mesg = Move of 'a move | Game of 'a game
 
+(* send function: sends a message to a given URL using a POST request *)
 let send url m =
   let r = XmlHttpRequest.create () in
   r##_open (js "POST") (js url) Js._true;
@@ -48,6 +50,7 @@ let make incoming outgoing =
 (*   (\*                   Js.Unsafe.eval_string (Printf.sprintf "window.alert('%s')" (Js.to_string r##.responseText)); *\) *)
 (*   (\*                   Js._false) *\) *)
 
+(* start function: initializes the game and handles the game loop *)
 let start () =
   Random.self_init ();
   let body =
@@ -75,5 +78,6 @@ let start () =
       loop (not b) (n + 1) (acc + (if name = human.name then po else -po)) in
     loop false 0 0)
 
+(* Entry point: sets the window onload handler to start the game *)
 let _ =
   Html.window##.onload := Html.handler (fun _ -> ignore (start ()); Js._false)

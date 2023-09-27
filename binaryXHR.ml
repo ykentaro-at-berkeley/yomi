@@ -1,3 +1,6 @@
+open Js_of_ocaml
+open Js_of_ocaml_lwt
+
 let (>>=) = Lwt.bind
 
 let blob_of_bytes s =
@@ -25,7 +28,7 @@ let sleep_at_least dur t =
 
 let perform url g =
   let bin = Marshal.to_bytes g [] in
-  let open Lwt_xmlHttpRequest in
+  let open XmlHttpRequest in
   let t =
     perform_raw
       ~content_type:"application/octet-stream"

@@ -1,3 +1,4 @@
+open Js_of_ocaml
 open CommonUI
 open Toppa
 let (relay_CK, relay_KC) = let open Ken in (relay_CK, relay_KC)
@@ -18,7 +19,8 @@ let start () =
                         You are the %s player in this round."
                        acc n (if b then "second" else "first") in
       Drawer.init s body;
-      Lwt_xmlHttpRequest.get relay_KC >>= fun { Lwt_xmlHttpRequest.content } ->
+      let open Js_of_ocaml_lwt.XmlHttpRequest in
+      get relay_KC >>= fun { content } ->
       match Json.unsafe_input (js content) with
       | Ken.Move _ -> Lwt.fail_with "I received a move, expecting a game"
       | Ken.Game g ->

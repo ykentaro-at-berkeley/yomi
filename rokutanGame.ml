@@ -14,7 +14,7 @@ let util_of_card = function (* Sudaosi apud Simizu *)
 let is_tan'  = function
   | (Yanagi, _) -> true
   | c -> util_of_card c = 1
-let ntan = "Sititan", Count (5, 7, is_tan')
+let ntan = "Rokutan", Count (5, 6, is_tan')
 
 let yaku = [ntan]
 

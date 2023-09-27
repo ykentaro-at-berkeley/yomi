@@ -168,10 +168,8 @@ module Make (G : Edsl.GAME) = struct
       ctx##drawImage_withSize (List.assoc c bank)
                               0. 0.
                               card_width card_height;
-      (* canv##.style##.cssText :=
-       *   js "transition-property: left, top;\
-       *       transition-duration: 0.1s;\
-       *       transition-timing-function: linear"; *)
+
+      canv##.style##.cssText := js "transition: top 0.5s, left 0.5s";
       canv##.style##.border := js card_border;
       let handler e =
         ignore (display_play_guide c);
@@ -288,8 +286,7 @@ module Make (G : Edsl.GAME) = struct
         Lwt.return ())
 
     let align_tori' y (cs : card list) =
-      let inner =
-        Js.Optdef.get Html.window##.innerWidth (fun () -> 1024) in
+      let inner = Html.window##.innerWidth in
       Printf.printf "inner = %d\n" inner;
       let left =
         let rect = div##getBoundingClientRect in
