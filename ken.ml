@@ -1,10 +1,11 @@
 (* c872be81-c6bc-5fa9-bb33-4e9c5c9129e2 *)
 
+open Js_of_ocaml
 open CommonUI
 open Toppa
 
-let relay_CK = "https://httprelay.io/link/CK-c872be81-c6bc-5fa9-bb33-4e9c5c9129e2"
-let relay_KC = "https://httprelay.io/link/KC-c872be81-c6bc-5fa9-bb33-4e9c5c9129e2"
+let relay_CK = "https://demo.httprelay.io/link/CK-c872be81-c6bc-5fa9-bb33-4e9c5c9129e2"
+let relay_KC = "https://demo.httprelay.io/link/KC-c872be81-c6bc-5fa9-bb33-4e9c5c9129e2"
 
 type 'a mesg = Move of 'a move | Game of 'a game
 
@@ -13,11 +14,14 @@ let send url m =
   r##_open (js "POST") (js url) Js._true;
   r##send (Js.Opt.return m)
 
+let hash g = Printf.sprintf "[%d]" (Hashtbl.hash g)
+
 let make incoming outgoing =
   let human =
     { visible = true;
       name = "Local Human";
       choose_move = fun x y ->
+                    Drawer.message (hash x);
                     CommonUI.human.choose_move x y >>= fun m ->
                     send outgoing (Json.output (Move m));
                     Lwt.return m } in
@@ -26,10 +30,10 @@ let make incoming outgoing =
       name = "Remote Human";
       choose_move = fun g _ -> (* Lwt.return (M.good_move g) *)
                     Drawer.message
-                    @@ Printf.sprintf "%s is thinking..." ai.name;
-                    (* send outgoing (Json.output (Game g)); *)
-                    Lwt_xmlHttpRequest.get incoming >>= fun f ->
-                    match Json.unsafe_input (js f.Lwt_xmlHttpRequest.content) with
+                    @@ Printf.sprintf "%s is thinking... %s" ai.name (hash g);
+                    let open Js_of_ocaml_lwt.XmlHttpRequest in
+                    get incoming >>= fun f ->
+                    match Json.unsafe_input (js f.content) with
                     | Game _ -> Lwt.fail_with "received a game, expecting a move"
                     | Move move ->
                        Drawer.message "";
